@@ -7,16 +7,21 @@ import stat
 import time
 from git import Repo, GitCommandError
 from datetime import datetime
+import requests
 
-# Clone repo (shallow)
-def clone_repo(repo_url, to_path):
+# Clone repo (shallow or full)
+def clone_repo(repo_url, to_path, shallow=True):
     try:
-        Repo.clone_from(repo_url, to_path, depth=1)
+        if shallow:
+            Repo.clone_from(repo_url, to_path, depth=1)
+        else:
+            Repo.clone_from(repo_url, to_path)
         return True, ""
     except GitCommandError as e:
         return False, str(e)
 
 # Get .py files from repo
+@st.cache_data
 def get_python_files(repo_path):
     py_files = []
     for root, _, files in os.walk(repo_path):
@@ -25,16 +30,27 @@ def get_python_files(repo_path):
                 py_files.append(os.path.join(root, file))
     return py_files
 
-# Parse functions from a .py file
+# Parse functions from a .py file with details
 def parse_functions_from_file(file_path):
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             node = ast.parse(f.read())
-        return [n.name for n in ast.walk(node) if isinstance(n, ast.FunctionDef)]
-    except Exception:
-        return []
+        funcs = []
+        for n in ast.walk(node):
+            if isinstance(n, ast.FunctionDef):
+                docstring = ast.get_docstring(n)
+                args = [arg.arg for arg in n.args.args]
+                funcs.append({
+                    "name": n.name,
+                    "args": args,
+                    "docstring": docstring or ""
+                })
+        funcs.sort(key=lambda f: f["name"])
+        return funcs
+    except Exception as e:
+        return [{"name": f"⚠️ Error parsing {os.path.basename(file_path)}", "args": [], "docstring": str(e)}]
 
-# Rank Python files by recent Git activity
+# Rank files by git commit activity
 def rank_files_by_git_activity(repo_path, files):
     repo = Repo(repo_path)
     file_commit_dates = {}
@@ -42,59 +58,47 @@ def rank_files_by_git_activity(repo_path, files):
         rel_path = os.path.relpath(f, repo_path)
         commits = list(repo.iter_commits(paths=rel_path, max_count=5))
         if commits:
-            most_recent_commit = commits[0]
-            commit_date = datetime.fromtimestamp(most_recent_commit.committed_date)
+            commit_date = datetime.fromtimestamp(commits[0].committed_date)
             file_commit_dates[f] = commit_date
         else:
             file_commit_dates[f] = datetime(1970, 1, 1)
     return sorted(file_commit_dates.items(), key=lambda x: x[1], reverse=True)
 
-# Summarize functions in a file
-def summarize_file_functions(file_path):
-    funcs = parse_functions_from_file(file_path)
-    if not funcs:
-        return "No functions found."
-    return "Functions:\n" + "\n".join([f"- {f}" for f in funcs])
-
-# Build nested dict tree representing repo file structure with functions
+# Build repo tree
 def build_repo_tree(py_files, repo_root):
     tree = {}
-    for file_path in py_files:
+    for file_path in sorted(py_files):
         rel_path = os.path.relpath(file_path, repo_root)
         parts = rel_path.split(os.sep)
-
         current_level = tree
-        for part in parts[:-1]:  # folder levels
+        for part in parts[:-1]:
             current_level = current_level.setdefault(part, {})
-
-        # Add file and its functions
-        funcs = parse_functions_from_file(file_path)
-        current_level[parts[-1]] = funcs if funcs else []
+        current_level[parts[-1]] = parse_functions_from_file(file_path)
     return tree
 
-# Render the repo tree in Streamlit without nested expanders error
+# Render tree
 def render_tree(tree, parent_path=""):
-    for key, value in tree.items():
+    for key in sorted(tree.keys()):
+        value = tree[key]
         if isinstance(value, dict):
-            # Folder - render as markdown header
             st.markdown(f"**📁 {key}**")
             with st.container():
                 render_tree(value, os.path.join(parent_path, key))
         else:
-            # File with functions list
-            if value:  # functions present
+            if value:
                 st.markdown(f"- 📄 **{key}**")
                 for func in value:
-                    st.markdown(f"    - ⚙️ {func}")
+                    args = ", ".join(func["args"])
+                    st.markdown(f"    - ⚙️ `{func['name']}({args})`")
             else:
                 st.markdown(f"- 📄 {key} _(no functions found)_")
 
-# Safe removal of read-only files (Windows fix)
+# Handle read-only files
 def force_remove_readonly(func, path, exc_info):
     os.chmod(path, stat.S_IWRITE)
     func(path)
 
-# Cleanup temp directory with retries to fix Windows PermissionError
+# Cleanup temp directory
 def cleanup_temp_dir(path, retries=5, delay=1):
     for _ in range(retries):
         try:
@@ -104,10 +108,25 @@ def cleanup_temp_dir(path, retries=5, delay=1):
             time.sleep(delay)
     return False
 
-# Streamlit UI
-st.title("🚀 Onboarding Buddy - Tree View & Function Summary")
+# Call summarizer microservice
+def call_summarizer_api(code_snippet):
+    try:
+        response = requests.post(
+            "http://127.0.0.1:8000/summarize",
+            json={"code": code_snippet},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json().get("summary", "No summary returned.")
+    except Exception as e:
+        return f"Error calling summarizer API: {e}"
+
+# --- Streamlit UI ---
+st.set_page_config(page_title="Onboarding Buddy", layout="wide")
+st.title("🚀 Onboarding Buddy - Tree View & GPT Code Summary")
 
 repo_url = st.text_input("Enter GitHub repo URL (public):", value="https://github.com/psf/requests")
+shallow_clone = st.checkbox("Use shallow clone (faster)", value=True)
 
 if st.button("Analyze Repo"):
     if not repo_url.strip():
@@ -116,7 +135,7 @@ if st.button("Analyze Repo"):
         temp_dir = tempfile.mkdtemp()
         try:
             with st.spinner("Cloning repo..."):
-                success, err = clone_repo(repo_url, temp_dir)
+                success, err = clone_repo(repo_url, temp_dir, shallow_clone)
                 if not success:
                     st.error(f"Failed to clone repo: {err}")
                 else:
@@ -129,21 +148,28 @@ if st.button("Analyze Repo"):
                             ranked_files = rank_files_by_git_activity(temp_dir, py_files)
                             repo_tree = build_repo_tree(py_files, temp_dir)
 
-                            # Sidebar file selection (ranked) with radio for persistence
-                            st.sidebar.header("Ranked Python Files by Recent Activity")
-                            options = [os.path.relpath(f, temp_dir) for f, _ in ranked_files]
-                            selected_option = st.sidebar.radio("Select a file to see function summary:", options)
-                            selected_file = os.path.join(temp_dir, selected_option) if selected_option else None
+                            # Sidebar ranked files with dates
+                            st.sidebar.header("📌 Ranked Python Files")
+                            options = [
+                                f"{os.path.relpath(f, temp_dir)} ({dt.strftime('%Y-%m-%d')})"
+                                for f, dt in ranked_files
+                            ]
+                            selected_option = st.sidebar.radio("Select a file:", options)
+                            selected_index = options.index(selected_option)
+                            selected_file = ranked_files[selected_index][0]
 
-                            # Main: Render repo tree structure with functions
-                            st.header("Repository Structure")
+                            # Main: Repo tree
+                            st.header("📂 Repository Structure")
                             render_tree(repo_tree)
 
-                            # If a file selected in sidebar, show function summary
-                            if selected_file:
-                                st.header(f"File: {selected_option}")
-                                summary = summarize_file_functions(selected_file)
-                                st.text_area("Summary of functions", summary, height=200)
+                            # Read full code from selected file
+                            with open(selected_file, "r", encoding="utf-8") as f:
+                                code_text = f.read()
+
+                            # Call summarizer API on full file code
+                            st.header(f"📝 GPT-powered Code Summary: {selected_option}")
+                            summary = call_summarizer_api(code_text)
+                            st.text_area("Summary", summary, height=300)
 
         finally:
             success = cleanup_temp_dir(temp_dir)
