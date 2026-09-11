@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OnBoarding Buddy | AI Repository Intelligence</title>
+    <!-- Google Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Vis Network for 2D Dependency Graph -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <!-- Marked for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Prism for Code Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation Bar -->
+        <header class="navbar glass-panel">
+            <div class="logo-group">
+                <div class="logo-icon">🚀</div>
+                <div>
+                    <h1 class="logo-title">OnBoarding Buddy</h1>
+                    <span class="logo-subtitle">Groq AI Code Intelligence & Architecture Analyzer</span>
+                </div>
+            </div>
+
+            <!-- Repo URL Input Form -->
+            <form id="repo-form" class="repo-input-container">
+                <div class="input-wrapper">
+                    <i class="fa-brands fa-github input-icon"></i>
+                    <input type="text" id="repo-input" placeholder="Enter GitHub URL or local folder path..." value="https://github.com/psf/requests" required>
+                </div>
+                <button type="submit" id="analyze-btn" class="btn btn-primary">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Repo
+                </button>
+            </form>
+
+            <div class="status-badge" id="groq-status">
+                <span class="pulse-dot grey"></span> Checking Groq API...
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="workspace">
+            <!-- Navigation Tabs -->
+            <nav class="tab-nav">
+                <button class="tab-btn active" data-tab="explorer-tab">
+                    <i class="fa-solid fa-folder-tree"></i> Code Explorer
+                </button>
+                <button class="tab-btn" data-tab="guide-tab">
+                    <i class="fa-solid fa-book-open"></i> Onboarding Guide
+                </button>
+                <button class="tab-btn" data-tab="graph-tab">
+                    <i class="fa-solid fa-diagram-project"></i> Dependency Graph
+                </button>
+                <button class="tab-btn" data-tab="chat-tab">
+                    <i class="fa-solid fa-comments"></i> AI Assistant
+                </button>
+            </nav>
+
+            <!-- Tab Content Area -->
+            <div class="tab-content">
+                <!-- TAB 1: CODE EXPLORER -->
+                <section id="explorer-tab" class="tab-pane active">
+                    <div class="explorer-grid">
+                        <!-- Sidebar: File Tree & Ranked List -->
+                        <aside class="explorer-sidebar glass-panel">
+                            <div class="sidebar-header">
+                                <h3><i class="fa-solid fa-list-check"></i> Files & Activity</h3>
+                                <span class="badge" id="file-count">0 files</span>
+                            </div>
+                            <div class="sidebar-scroll" id="tree-container">
+                                <div class="empty-state">
+                                    <i class="fa-solid fa-code"></i>
+                                    <p>Enter a repository URL above and click <strong>Analyze Repo</strong> to get started.</p>
+                                </div>
+                            </div>
+                        </aside>
+
+                        <!-- Main Viewer: Code & AI Summary -->
+                        <div class="explorer-viewer">
+                            <!-- Selected File Banner -->
+                            <div class="viewer-header glass-panel">
+                                <div class="file-info">
+                                    <i class="fa-regular fa-file-code"></i>
+                                    <span id="current-filename">Select a file to view content</span>
+                                </div>
+                                <button id="summarize-btn" class="btn btn-secondary btn-sm" disabled>
+                                    <i class="fa-solid fa-bolt"></i> Summarize with Groq AI
+                                </button>
+                            </div>
+
+                            <div class="viewer-body">
+                                <!-- Code Editor / View Pane -->
+                                <div class="code-pane glass-panel">
+                                    <pre><code id="code-content" class="language-python"># Select a file from the repository tree to view its source code.</code></pre>
+                                </div>
+
+                                <!-- AI Summary Panel -->
+                                <div class="summary-pane glass-panel">
+                                    <div class="summary-header">
+                                        <h4><i class="fa-solid fa-robot"></i> Groq AI Summary</h4>
+                                        <span class="badge badge-purple" id="summary-model-tag">llama-3.3-70b</span>
+                                    </div>
+                                    <div class="summary-content" id="summary-text">
+                                        <p class="placeholder-text">Click <strong>"Summarize with Groq AI"</strong> to generate a developer-focused architectural summary of this file.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 2: ONBOARDING GUIDE -->
+                <section id="guide-tab" class="tab-pane">
+                    <div class="guide-container glass-panel">
+                        <div class="guide-toolbar">
+                            <div>
+                                <h2><i class="fa-solid fa-book-bookmark"></i> Automated Onboarding Guide</h2>
+                                <p class="text-muted">AI-generated comprehensive documentation tailored for new contributors.</p>
+                            </div>
+                            <button id="generate-guide-btn" class="btn btn-primary">
+                                <i class="fa-solid fa-sparkles"></i> Generate Guide with Groq
+                            </button>
+                        </div>
+                        <hr class="divider">
+                        <div id="guide-content" class="markdown-body">
+                            <div class="empty-state large">
+                                <i class="fa-solid fa-file-invoice"></i>
+                                <h3>No Onboarding Guide Generated Yet</h3>
+                                <p>Click <strong>"Generate Guide with Groq"</strong> to analyze the repository structure and create an instant <code>ONBOARDING_GUIDE.md</code>.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 3: DEPENDENCY GRAPH -->
+                <section id="graph-tab" class="tab-pane">
+                    <div class="graph-container glass-panel">
+                        <div class="graph-header">
+                            <div>
+                                <h2><i class="fa-solid fa-network-wired"></i> Module & Import Dependency Map</h2>
+                                <p class="text-muted">Interactive 2D visualization of files and cross-module references.</p>
+                            </div>
+                            <button id="refresh-graph-btn" class="btn btn-secondary btn-sm">
+                                <i class="fa-solid fa-rotate"></i> Refresh Graph
+                            </button>
+                        </div>
+                        <div id="network-graph" class="network-canvas"></div>
+                    </div>
+                </section>
+
+                <!-- TAB 4: AI ASSISTANT CHAT -->
+                <section id="chat-tab" class="tab-pane">
+                    <div class="chat-container glass-panel">
+                        <div class="chat-header">
+                            <div class="assistant-avatar">🤖</div>
+                            <div>
+                                <h2>Onboarding Assistant</h2>
+                                <p class="text-muted">Ask questions about repository architecture, setup, or features.</p>
+                            </div>
+                        </div>
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="message assistant">
+                                <div class="msg-bubble">
+                                    Hello! 👋 I'm your Groq-powered OnBoarding Assistant. Ask me anything about this codebase, where to start, or how features work!
+                                </div>
+                            </div>
+                        </div>
+                        <form id="chat-form" class="chat-input-bar">
+                            <input type="text" id="chat-input" placeholder="Ask a question about this repository..." required>
+                            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> Send</button>
+                        </form>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Script -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
