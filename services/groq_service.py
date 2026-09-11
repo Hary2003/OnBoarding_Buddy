@@ -8,66 +8,79 @@ try:
 except ImportError:
     GROQ_SDK_AVAILABLE = False
 
+VALID_FALLBACK_MODELS = ["groq/compound", "groq/compound-mini", "qwen/qwen3.6-27b"]
+
+MODEL_ALIAS_MAP = {
+    "llama-3.3-70b-versatile": "groq/compound",
+    "llama-3.1-8b-instant": "groq/compound-mini",
+    "llama-3.3-70b": "groq/compound",
+    "qwen-2.5-coder-32b": "qwen/qwen3.6-27b"
+}
+
 class GroqService:
-    # Groq OpenAI-compatible fallback endpoint
     GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
     def _call_groq_api(self, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
-        """Call Groq API via official Groq SDK or REST fallback."""
+        """Call Groq API via official Groq SDK or REST fallback with auto-retry on valid models."""
         if not settings.is_groq_configured:
             return "⚠️ **Groq API Key missing.** Please set `GROQ_API_KEY` in your `.env` file to enable AI insights."
 
-        model_name = settings.GROQ_MODEL or "groq/compound"
+        configured_model = (settings.GROQ_MODEL or "groq/compound").strip()
+        # Automatically map legacy model names if specified
+        target_model = MODEL_ALIAS_MAP.get(configured_model, configured_model)
 
-        # Try official Groq SDK first
-        if GROQ_SDK_AVAILABLE:
+        models_to_try = [target_model] + [m for m in VALID_FALLBACK_MODELS if m != target_model]
+
+        last_error = ""
+
+        for model_name in models_to_try:
+            # 1. Try official Groq SDK first
+            if GROQ_SDK_AVAILABLE:
+                try:
+                    client = Groq(api_key=settings.GROQ_API_KEY)
+                    chat_completion = client.chat.completions.create(
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        model=model_name,
+                        temperature=temperature,
+                        max_tokens=2048
+                    )
+                    return chat_completion.choices[0].message.content
+                except Exception as e:
+                    err_str = str(e)
+                    if "401" in err_str or "Invalid API Key" in err_str:
+                        return "❌ **Invalid Groq API Key.** Please check `GROQ_API_KEY` in `.env`."
+                    last_error = err_str
+
+            # 2. Try HTTP REST fallback
+            headers = {
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model_name,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": temperature,
+                "max_tokens": 2048
+            }
+
             try:
-                client = Groq(api_key=settings.GROQ_API_KEY)
-                chat_completion = client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    model=model_name,
-                    temperature=temperature,
-                    max_tokens=2048
-                )
-                return chat_completion.choices[0].message.content
+                response = requests.post(self.GROQ_URL, headers=headers, json=payload, timeout=30)
+                if response.status_code == 401:
+                    return "❌ **Invalid Groq API Key.** Please verify your key in `.env`."
+                if response.status_code == 200:
+                    data = response.json()
+                    return data["choices"][0]["message"]["content"]
+                last_error = response.text
             except Exception as e:
-                err_str = str(e)
-                if "401" in err_str or "Invalid API Key" in err_str:
-                    return "❌ **Invalid Groq API Key.** Please check `GROQ_API_KEY` in `.env`."
-                # Fall through to HTTP request fallback if SDK fails
+                last_error = str(e)
 
-        # HTTP Fallback
-        headers = {
-            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": temperature,
-            "max_tokens": 2048
-        }
-        
-        try:
-            response = requests.post(self.GROQ_URL, headers=headers, json=payload, timeout=45)
-            if response.status_code == 401:
-                return "❌ **Invalid Groq API Key.** Please verify your key in `.env`."
-            if response.status_code == 404:
-                return f"❌ **Groq API Model Error (404).** Model `{model_name}` not found or endpoint unavailable. Try model `llama-3.3-70b-versatile` or `llama-3.1-8b-instant`."
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-        except requests.exceptions.Timeout:
-            return "⚠️ **Groq API timed out.** Please try again."
-        except Exception as e:
-            return f"❌ **Groq API Error**: {str(e)}"
+        return f"❌ **Groq API Error**: Could not complete request. Details: {last_error}"
 
     def summarize_code(self, file_path: str, code_content: str) -> dict:
         """Summarizes a code file using Groq LLM."""
