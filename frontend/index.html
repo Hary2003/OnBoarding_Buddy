@@ -57,7 +57,7 @@
                     <i class="fa-solid fa-book-open"></i> Onboarding Guide
                 </button>
                 <button class="tab-btn" data-tab="graph-tab">
-                    <i class="fa-solid fa-diagram-project"></i> Dependency Graph
+                    <i class="fa-solid fa-diagram-project"></i> Dependency Map
                 </button>
                 <button class="tab-btn" data-tab="chat-tab">
                     <i class="fa-solid fa-comments"></i> AI Assistant
@@ -140,19 +140,82 @@
                     </div>
                 </section>
 
-                <!-- TAB 3: DEPENDENCY GRAPH -->
+                <!-- TAB 3: DEPENDENCY GRAPH MAP -->
                 <section id="graph-tab" class="tab-pane">
                     <div class="graph-container glass-panel">
-                        <div class="graph-header">
-                            <div>
-                                <h2><i class="fa-solid fa-network-wired"></i> Module & Import Dependency Map</h2>
-                                <p class="text-muted">Interactive 2D visualization of files and cross-module references.</p>
+                        <!-- Controls & Toolbar -->
+                        <div class="graph-toolbar">
+                            <div class="toolbar-left">
+                                <h3 class="toolbar-title"><i class="fa-solid fa-network-wired"></i> Architecture Dependency Map</h3>
+                                <div class="filter-group">
+                                    <label><i class="fa-solid fa-filter"></i> View Mode:</label>
+                                    <select id="graph-filter-select" class="select-input">
+                                        <option value="all">All Files & Modules</option>
+                                        <option value="core">Core Modules (High Centrality)</option>
+                                        <option value="entry">Entry Points & Call Chains</option>
+                                        <option value="circular">Circular Dependencies Only</option>
+                                    </select>
+                                </div>
+                                <div class="filter-group">
+                                    <label><i class="fa-solid fa-sitemap"></i> Layout:</label>
+                                    <select id="graph-layout-select" class="select-input">
+                                        <option value="force">Physics Force-Directed</option>
+                                        <option value="tree">Hierarchical Tree</option>
+                                    </select>
+                                </div>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="graph-external-chk" checked> Show External Packages
+                                </label>
                             </div>
                             <button id="refresh-graph-btn" class="btn btn-secondary btn-sm">
-                                <i class="fa-solid fa-rotate"></i> Refresh Graph
+                                <i class="fa-solid fa-rotate"></i> Reset View
                             </button>
                         </div>
-                        <div id="network-graph" class="network-canvas"></div>
+
+                        <!-- Canvas & Inspector Overlay Split -->
+                        <div class="graph-viewport">
+                            <div id="network-graph" class="network-canvas"></div>
+
+                            <!-- Node Detail Inspector Drawer -->
+                            <aside id="node-inspector" class="node-inspector glass-panel hidden">
+                                <div class="inspector-header">
+                                    <div>
+                                        <span class="badge badge-purple" id="inspector-node-type">Internal File</span>
+                                        <h3 id="inspector-node-title">select_file.py</h3>
+                                    </div>
+                                    <button id="close-inspector-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                                </div>
+                                <div class="inspector-body">
+                                    <div class="metric-cards">
+                                        <div class="metric-card">
+                                            <span class="metric-num" id="inspector-in-degree">0</span>
+                                            <span class="metric-label">Imported By (In-Degree)</span>
+                                        </div>
+                                        <div class="metric-card">
+                                            <span class="metric-num" id="inspector-out-degree">0</span>
+                                            <span class="metric-label">Imports (Out-Degree)</span>
+                                        </div>
+                                        <div class="metric-card">
+                                            <span class="metric-num" id="inspector-score">0.0</span>
+                                            <span class="metric-label">Activity Score</span>
+                                        </div>
+                                    </div>
+                                    <div class="inspector-section">
+                                        <h4><i class="fa-solid fa-code-branch"></i> Connected Dependencies</h4>
+                                        <div id="inspector-deps-list" class="tag-cloud"></div>
+                                    </div>
+                                    <div class="inspector-section">
+                                        <h4><i class="fa-solid fa-cube"></i> Exported Symbols</h4>
+                                        <div id="inspector-symbols-list" class="tag-cloud"></div>
+                                    </div>
+                                </div>
+                                <div class="inspector-footer">
+                                    <button id="jump-code-btn" class="btn btn-primary btn-sm btn-full">
+                                        <i class="fa-solid fa-code"></i> Jump to File in Code Explorer
+                                    </button>
+                                </div>
+                            </aside>
+                        </div>
                     </div>
                 </section>
 

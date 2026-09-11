@@ -17,6 +17,25 @@ class Dependency(BaseModel):
     import_statement: str = Field(..., description="Raw import string")
     is_internal: bool = Field(True, description="True if dependency points to an internal repository file")
 
+class GraphNode(BaseModel):
+    id: str = Field(..., description="Unique node identifier")
+    label: str = Field(..., description="Display label (filename or package name)")
+    path: str = Field(..., description="Relative file path or package string")
+    language: str = Field(..., description="Language group: python, javascript, go, web, external")
+    in_degree: int = Field(0, description="Incoming dependency count (core module centrality)")
+    out_degree: int = Field(0, description="Outgoing dependency count")
+    is_entry_point: bool = Field(False, description="True if entry point file")
+    is_circular: bool = Field(False, description="True if part of circular dependency cycle")
+    activity_score: float = Field(0.0, description="Git activity score")
+    symbols_count: int = Field(0, description="Extracted symbol count")
+    node_type: str = Field("internal", description="node_type: internal or external_package")
+
+class GraphEdge(BaseModel):
+    from_id: str = Field(..., description="Source node ID")
+    to_id: str = Field(..., description="Target node ID")
+    statement: Optional[str] = Field("", description="Raw import statement")
+    edge_type: str = Field("internal_import", description="Edge type: internal_import or external_package")
+
 class FileInfo(BaseModel):
     full_path: str = Field(..., description="Absolute filesystem path")
     relative_path: str = Field(..., description="Normalized relative path from repository root")
@@ -27,6 +46,9 @@ class FileInfo(BaseModel):
     last_modified: str = Field(..., description="Last Git commit date or file modification date")
     commit_count: int = Field(0, description="Number of Git commits touching this file")
     activity_score: float = Field(0.0, description="Normalized Git activity score between 0.0 and 100.0")
+    in_degree: int = Field(0, description="Number of files importing this file")
+    out_degree: int = Field(0, description="Number of imports declared by this file")
+    is_circular: bool = Field(False, description="True if part of circular dependency loop")
     symbols: List[Symbol] = Field(default_factory=list, description="List of extracted functions, classes, and methods")
     dependencies: List[Dependency] = Field(default_factory=list, description="List of imported dependencies")
     is_entry_point: bool = Field(False, description="Flag indicating whether file is a likely application entry point")

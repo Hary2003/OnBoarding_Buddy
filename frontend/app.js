@@ -3,6 +3,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentSession = null;
     let selectedFilePath = null;
     let networkGraph = null;
+    let currentInspectorNode = null;
 
     // DOM Elements
     const repoForm = document.getElementById("repo-form");
@@ -21,6 +22,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const guideContent = document.getElementById("guide-content");
     
     const refreshGraphBtn = document.getElementById("refresh-graph-btn");
+    const graphFilterSelect = document.getElementById("graph-filter-select");
+    const graphLayoutSelect = document.getElementById("graph-layout-select");
+    const graphExternalChk = document.getElementById("graph-external-chk");
+
+    const nodeInspector = document.getElementById("node-inspector");
+    const closeInspectorBtn = document.getElementById("close-inspector-btn");
+    const inspectorNodeTitle = document.getElementById("inspector-node-title");
+    const inspectorNodeType = document.getElementById("inspector-node-type");
+    const inspectorInDegree = document.getElementById("inspector-in-degree");
+    const inspectorOutDegree = document.getElementById("inspector-out-degree");
+    const inspectorScore = document.getElementById("inspector-score");
+    const inspectorDepsList = document.getElementById("inspector-deps-list");
+    const inspectorSymbolsList = document.getElementById("inspector-symbols-list");
+    const jumpCodeBtn = document.getElementById("jump-code-btn");
     
     const chatForm = document.getElementById("chat-form");
     const chatInput = document.getElementById("chat-input");
@@ -83,7 +98,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 throw new Error(err.detail || "Failed to analyze repository.");
             }
 
-            // RepositoryIndex object received
             const repoIndex = await res.json();
             currentSession = repoIndex;
             fileCount.textContent = `${repoIndex.total_files} files (${repoIndex.total_lines} lines)`;
@@ -92,7 +106,6 @@ document.addEventListener("DOMContentLoaded", () => {
             analyzeBtn.disabled = false;
             analyzeBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Repo`;
 
-            // Auto-select first entry point or highest ranked file
             if (repoIndex.files.length > 0) {
                 const topFile = repoIndex.files.find(f => f.is_entry_point) || repoIndex.files[0];
                 loadFileContent(topFile.full_path, topFile.relative_path);
@@ -112,7 +125,6 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // Sort by activity score descending
         const sortedFiles = [...files].sort((a, b) => b.activity_score - a.activity_score);
 
         treeContainer.innerHTML = "";
@@ -233,51 +245,161 @@ document.addEventListener("DOMContentLoaded", () => {
         const container = document.getElementById("network-graph");
         if (!container) return;
 
+        const filterType = graphFilterSelect ? graphFilterSelect.value : "all";
+        const layoutType = graphLayoutSelect ? graphLayoutSelect.value : "force";
+        const includeExt = graphExternalChk ? graphExternalChk.checked : true;
+
         try {
-            const res = await fetch("/api/graph?session_id=default");
+            const res = await fetch(`/api/graph?session_id=default&filter_type=${filterType}&include_external=${includeExt}`);
             const data = await res.json();
 
             if (!data.nodes || data.nodes.length === 0) {
-                container.innerHTML = `<div class="empty-state"><p>No dependency graph data available.</p></div>`;
+                container.innerHTML = `<div class="empty-state"><p>No dependency graph nodes found for filter mode: <strong>${filterType}</strong></p></div>`;
                 return;
             }
 
-            const nodes = new vis.DataSet(data.nodes.map(n => ({
-                id: n.id,
-                label: n.label,
-                title: n.title,
-                shape: 'dot',
-                size: 16,
-                color: n.group === 'python' ? '#6366f1' : (n.group === 'javascript' || n.group === 'typescript' ? '#f59e0b' : '#06b6d4')
-            })));
+            const nodesDataSet = new vis.DataSet(data.nodes.map(n => {
+                // Compute size based on in_degree centrality
+                const baseSize = 14;
+                const sizeBonus = Math.min(24, (n.in_degree || 0) * 4);
+                const finalSize = baseSize + sizeBonus;
 
-            const edges = new vis.DataSet(data.edges.map(e => ({
+                let nodeColor = '#06b6d4'; // default cyan
+                if (n.language === 'python') nodeColor = '#6366f1';
+                else if (n.language === 'javascript' || n.language === 'typescript') nodeColor = '#f59e0b';
+                else if (n.node_type === 'external_package') nodeColor = '#8b5cf6';
+                if (n.is_entry_point) nodeColor = '#10b981';
+                if (n.is_circular) nodeColor = '#f43f5e';
+
+                return {
+                    id: n.id,
+                    label: n.label,
+                    title: n.title,
+                    shape: n.node_type === 'external_package' ? 'box' : (n.is_entry_point ? 'diamond' : 'dot'),
+                    size: finalSize,
+                    color: {
+                        background: nodeColor,
+                        border: n.is_circular ? '#f43f5e' : '#ffffff',
+                        highlight: { background: '#8b5cf6', border: '#ffffff' }
+                    },
+                    font: { color: '#f8fafc', face: 'Inter', size: 12 },
+                    rawData: n
+                };
+            }));
+
+            const edgesDataSet = new vis.DataSet(data.edges.map(e => ({
                 from: e.from,
                 to: e.to,
                 arrows: 'to',
-                color: { color: 'rgba(255,255,255,0.2)' }
+                color: { color: e.edge_type === 'external_package' ? 'rgba(139,92,246,0.3)' : 'rgba(99,102,241,0.3)' },
+                width: 1
             })));
 
-            const graphData = { nodes, edges };
+            const graphData = { nodes: nodesDataSet, edges: edgesDataSet };
             const options = {
-                physics: {
+                physics: layoutType === 'force' ? {
                     solver: 'forceAtlas2Based',
-                    forceAtlas2Based: { gravitationalConstant: -30 }
-                },
-                interaction: { hover: true }
+                    forceAtlas2Based: { gravitationalConstant: -35, centralGravity: 0.01, springLength: 100 }
+                } : false,
+                layout: layoutType === 'tree' ? {
+                    hierarchical: { direction: 'UD', sortMethod: 'directed', levelSeparation: 120 }
+                } : {},
+                interaction: { hover: true, tooltipDelay: 100 }
             };
 
             if (networkGraph) networkGraph.destroy();
             networkGraph = new vis.Network(container, graphData, options);
+
+            // Handle Node Select / Click
+            networkGraph.on("selectNode", (params) => {
+                if (params.nodes.length > 0) {
+                    const selectedId = params.nodes[0];
+                    const nodeObj = nodesDataSet.get(selectedId);
+                    if (nodeObj && nodeObj.rawData) {
+                        openNodeInspector(nodeObj.rawData);
+                    }
+                }
+            });
+
+            networkGraph.on("deselectNode", () => {
+                closeNodeInspector();
+            });
 
         } catch (err) {
             container.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">Graph error: ${err.message}</p></div>`;
         }
     }
 
-    if (refreshGraphBtn) {
-        refreshGraphBtn.addEventListener("click", renderDependencyGraph);
+    // Open Node Inspector Side Drawer
+    function openNodeInspector(nodeData) {
+        currentInspectorNode = nodeData;
+        inspectorNodeTitle.textContent = nodeData.label;
+        inspectorNodeType.textContent = nodeData.node_type === 'external_package' ? 'External Package' : (nodeData.is_entry_point ? '🚀 Entry Point' : 'Source File');
+        
+        inspectorInDegree.textContent = nodeData.in_degree || 0;
+        inspectorOutDegree.textContent = nodeData.out_degree || 0;
+        inspectorScore.textContent = nodeData.activity_score || 0.0;
+
+        // Populate connected deps if session is active
+        if (currentSession) {
+            const fileObj = currentSession.files.find(f => f.relative_path === nodeData.path);
+            if (fileObj) {
+                // Dependencies list
+                if (fileObj.dependencies && fileObj.dependencies.length > 0) {
+                    inspectorDepsList.innerHTML = fileObj.dependencies.map(d => `<span class="badge">${d.target_path}</span>`).join("");
+                } else {
+                    inspectorDepsList.innerHTML = `<span class="text-muted" style="font-size:12px;">No dependencies declared.</span>`;
+                }
+
+                // Symbols list
+                if (fileObj.symbols && fileObj.symbols.length > 0) {
+                    inspectorSymbolsList.innerHTML = fileObj.symbols.map(s => `<span class="badge badge-purple">⚙️ ${s.name}()</span>`).join("");
+                } else {
+                    inspectorSymbolsList.innerHTML = `<span class="text-muted" style="font-size:12px;">No exported functions found.</span>`;
+                }
+            } else {
+                inspectorDepsList.innerHTML = `<span class="text-muted" style="font-size:12px;">External third-party module.</span>`;
+                inspectorSymbolsList.innerHTML = `<span class="text-muted" style="font-size:12px;">External package.</span>`;
+            }
+        }
+
+        nodeInspector.classList.remove("hidden");
     }
+
+    function closeNodeInspector() {
+        nodeInspector.classList.add("hidden");
+        currentInspectorNode = null;
+    }
+
+    if (closeInspectorBtn) {
+        closeInspectorBtn.addEventListener("click", closeNodeInspector);
+    }
+
+    // Jump to Code button handler
+    if (jumpCodeBtn) {
+        jumpCodeBtn.addEventListener("click", () => {
+            if (!currentInspectorNode || currentInspectorNode.node_type === 'external_package') {
+                alert("Cannot view source code for external packages.");
+                return;
+            }
+
+            // Find matching file in tree
+            const targetRelPath = currentInspectorNode.path;
+            const fileObj = currentSession ? currentSession.files.find(f => f.relative_path === targetRelPath) : null;
+            
+            if (fileObj) {
+                // Switch to Code Explorer tab
+                document.querySelector('.tab-btn[data-tab="explorer-tab"]').click();
+                loadFileContent(fileObj.full_path, fileObj.relative_path);
+            }
+        });
+    }
+
+    // Toolbar Event Listeners
+    if (refreshGraphBtn) refreshGraphBtn.addEventListener("click", renderDependencyGraph);
+    if (graphFilterSelect) graphFilterSelect.addEventListener("change", renderDependencyGraph);
+    if (graphLayoutSelect) graphLayoutSelect.addEventListener("change", renderDependencyGraph);
+    if (graphExternalChk) graphExternalChk.addEventListener("change", renderDependencyGraph);
 
     // AI Chat Assistant
     chatForm.addEventListener("submit", async (e) => {

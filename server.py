@@ -141,12 +141,35 @@ async def repo_chat(req: ChatRequest):
     return {"answer": answer}
 
 @app.get("/api/graph")
-async def get_graph(session_id: str = "default"):
+async def get_graph(
+    session_id: str = "default",
+    include_external: bool = Query(True),
+    filter_type: str = Query("all")  # all, core, entry, circular
+):
     session = ACTIVE_SESSIONS.get(session_id)
     if not session:
         return {"nodes": [], "edges": []}
     
-    return session.dependency_graph
+    graph_data = repo_service.extract_dependency_graph(session.repo_path, session.files, include_external=include_external)
+    
+    if filter_type == "core":
+        # Keep nodes with in_degree >= 1 or top centrality
+        valid_node_ids = {n["id"] for n in graph_data["nodes"] if n["in_degree"] >= 1 or n["node_type"] == "external_package"}
+        graph_data["nodes"] = [n for n in graph_data["nodes"] if n["id"] in valid_node_ids]
+        graph_data["edges"] = [e for e in graph_data["edges"] if e["from"] in valid_node_ids and e["to"] in valid_node_ids]
+    elif filter_type == "entry":
+        valid_node_ids = {n["id"] for n in graph_data["nodes"] if n["is_entry_point"]}
+        # Also include direct downstream targets from entry points
+        downstream_ids = {e["to"] for e in graph_data["edges"] if e["from"] in valid_node_ids}
+        valid_node_ids.update(downstream_ids)
+        graph_data["nodes"] = [n for n in graph_data["nodes"] if n["id"] in valid_node_ids]
+        graph_data["edges"] = [e for e in graph_data["edges"] if e["from"] in valid_node_ids and e["to"] in valid_node_ids]
+    elif filter_type == "circular":
+        valid_node_ids = {n["id"] for n in graph_data["nodes"] if n["is_circular"]}
+        graph_data["nodes"] = [n for n in graph_data["nodes"] if n["id"] in valid_node_ids]
+        graph_data["edges"] = [e for e in graph_data["edges"] if e["from"] in valid_node_ids and e["to"] in valid_node_ids]
+
+    return graph_data
 
 # Mount frontend static files
 frontend_path = os.path.join(os.path.dirname(__file__), "frontend")

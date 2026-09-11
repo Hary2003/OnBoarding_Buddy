@@ -6,11 +6,11 @@ import tempfile
 import shutil
 import stat
 import time
-from typing import Optional
+from typing import Optional, List, Dict, Set, Tuple
 from datetime import datetime
 from git import Repo, GitCommandError
 
-from models.repository_index import Symbol, Dependency, FileInfo, RepositoryIndex
+from models.repository_index import Symbol, Dependency, FileInfo, RepositoryIndex, GraphNode, GraphEdge
 
 IGNORE_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build", ".idea", ".vscode", "tmp", "temp"}
 SUPPORTED_EXTENSIONS = {
@@ -39,17 +39,15 @@ LANGUAGE_MAP = {
 }
 
 class RepoService:
-    def clone_or_use_repo(self, target: str) -> tuple[bool, str, str]:
+    def clone_or_use_repo(self, target: str) -> Tuple[bool, str, str]:
         """Clones a remote git URL or validates a local directory path."""
         target = target.strip()
         if not target:
             return False, "", "Target repository path or URL is empty."
         
-        # Check if local path exists
         if os.path.exists(target) and os.path.isdir(target):
             return True, os.path.abspath(target), ""
         
-        # If GitHub URL or git URL
         if target.startswith("http://") or target.startswith("https://") or target.endswith(".git"):
             temp_dir = tempfile.mkdtemp(prefix="onboarding_repo_")
             try:
@@ -64,7 +62,7 @@ class RepoService:
         
         return False, "", f"Invalid path or repository URL: {target}"
 
-    def get_repo_files(self, repo_path: str) -> list[str]:
+    def get_repo_files(self, repo_path: str) -> List[str]:
         """Returns all relevant source code files in repository."""
         code_files = []
         for root, dirs, files in os.walk(repo_path):
@@ -75,16 +73,15 @@ class RepoService:
                     code_files.append(os.path.join(root, file))
         return sorted(code_files)
 
-    def extract_symbols(self, file_path: str, language: str) -> list[Symbol]:
+    def extract_symbols(self, file_path: str, language: str) -> List[Symbol]:
         """Extracts function, method, and class symbols with AST or regex."""
-        symbols: list[Symbol] = []
+        symbols: List[Symbol] = []
         ext = os.path.splitext(file_path)[1].lower()
 
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
 
-            # --- Python AST Parser ---
             if ext == ".py":
                 try:
                     tree = ast.parse(content)
@@ -118,7 +115,6 @@ class RepoService:
                 except SyntaxError:
                     pass
 
-            # --- Multi-Language Regex Fallback (JS, TS, Go, Java, Rust) ---
             func_patterns = [
                 (r'def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)', "function"),
                 (r'class\s+([a-zA-Z_][a-zA-Z0-9_]*)', "class"),
@@ -150,9 +146,9 @@ class RepoService:
 
         return symbols
 
-    def extract_dependencies(self, file_path: str, repo_path: str, file_map: dict[str, str]) -> list[Dependency]:
-        """Resolves imported dependencies and checks if internal to repository."""
-        deps: list[Dependency] = []
+    def extract_dependencies(self, file_path: str, repo_path: str, file_map: Dict[str, str]) -> List[Dependency]:
+        """Precise AST & pattern import extraction resolving internal files vs external packages."""
+        deps: List[Dependency] = []
         source_rel = os.path.relpath(file_path, repo_path).replace("\\", "/")
         ext = os.path.splitext(file_path)[1].lower()
 
@@ -160,46 +156,103 @@ class RepoService:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
 
-            import_lines = []
-            if ext == ".py":
-                for line in content.splitlines():
-                    line_str = line.strip()
-                    if line_str.startswith("import ") or line_str.startswith("from "):
-                        import_lines.append(line_str)
-            elif ext in [".js", ".ts", ".jsx", ".tsx"]:
-                import_matches = re.findall(r'(?:import|require)\s*\(?[\'"]([^\'"]+)[\'"]\)?', content)
-                import_lines = [f"import {m}" for m in import_matches]
-            elif ext == ".go":
-                import_matches = re.findall(r'import\s+[\'"]([^\'"]+)[\'"]', content)
-                import_lines = [f"import {m}" for m in import_matches]
+            raw_imports: List[Tuple[str, str]] = [] # (module_path, statement)
 
-            for raw_import in import_lines:
-                target_path = raw_import
+            # Python AST import parsing
+            if ext == ".py":
+                try:
+                    tree = ast.parse(content)
+                    for n in ast.walk(tree):
+                        if isinstance(n, ast.Import):
+                            for alias in n.names:
+                                raw_imports.append((alias.name, f"import {alias.name}"))
+                        elif isinstance(n, ast.ImportFrom):
+                            mod = n.module or ""
+                            dots = "." * n.level
+                            full_mod = f"{dots}{mod}"
+                            for alias in n.names:
+                                raw_imports.append((f"{full_mod}.{alias.name}", f"from {full_mod} import {alias.name}"))
+                except SyntaxError:
+                    pass
+
+            # JS/TS ES6 & CommonJS import parsing
+            if ext in [".js", ".ts", ".jsx", ".tsx"]:
+                matches = re.findall(r'(?:import|from|require)\s*\(?[\'"]([^\'"]+)[\'"]\)?', content)
+                for m in matches:
+                    raw_imports.append((m, f"import {m}"))
+
+            # Go & Java imports
+            if ext in [".go", ".java", ".cs"]:
+                matches = re.findall(r'import\s+(?:[\w.]+\s+)?[\'"]?([^\'"\s;]+)[\'"]?', content)
+                for m in matches:
+                    raw_imports.append((m, f"import {m}"))
+
+            # Resolve targets against repository internal file_map
+            seen_targets = set()
+            for mod_str, raw_stmt in raw_imports:
+                target_path = mod_str
                 is_internal = False
-                
-                # Check match against repo relative file paths
+
                 for rel_path in file_map.keys():
-                    base_mod = os.path.splitext(os.path.basename(rel_path))[0]
-                    mod_path = rel_path.replace("/", ".").replace(".py", "")
-                    
-                    if base_mod in raw_import or mod_path in raw_import or rel_path in raw_import:
+                    base_name = os.path.splitext(os.path.basename(rel_path))[0]
+                    dotted_path = rel_path.replace("/", ".").replace(".py", "")
+
+                    if (mod_str and mod_str.startswith(".")) or base_name == mod_str or mod_str in dotted_path or rel_path in mod_str:
                         target_path = rel_path
                         is_internal = True
                         break
 
-                deps.append(Dependency(
-                    source_path=source_rel,
-                    target_path=target_path,
-                    import_statement=raw_import[:120],
-                    is_internal=is_internal
-                ))
+                edge_key = (source_rel, target_path)
+                if edge_key not in seen_targets:
+                    seen_targets.add(edge_key)
+                    deps.append(Dependency(
+                        source_path=source_rel,
+                        target_path=target_path,
+                        import_statement=raw_stmt[:120],
+                        is_internal=is_internal
+                    ))
 
         except Exception:
             pass
 
         return deps
 
-    def calculate_git_activity_scores(self, repo_path: str, files: list[str]) -> dict[str, tuple[int, str, float]]:
+    def detect_circular_dependencies(self, file_info_list: List[FileInfo]) -> Set[str]:
+        """Detects circular dependency cycles (A -> B -> A) using Tarjan's / DFS cycle detection."""
+        graph: Dict[str, Set[str]] = {f.relative_path: set() for f in file_info_list}
+        for f in file_info_list:
+            for dep in f.dependencies:
+                if dep.is_internal and dep.target_path in graph and dep.target_path != f.relative_path:
+                    graph[f.relative_path].add(dep.target_path)
+
+        circular_files: Set[str] = set()
+        visited: Set[str] = set()
+        rec_stack: Set[str] = set()
+
+        def dfs(node: str, path: List[str]):
+            visited.add(node)
+            rec_stack.add(node)
+            path.append(node)
+
+            for neighbor in graph.get(node, []):
+                if neighbor not in visited:
+                    dfs(neighbor, path)
+                elif neighbor in rec_stack:
+                    # Cycle found!
+                    cycle_start_idx = path.index(neighbor) if neighbor in path else 0
+                    for cycle_node in path[cycle_start_idx:]:
+                        circular_files.add(cycle_node)
+
+            rec_stack.remove(node)
+            path.pop()
+
+        for f in file_info_list:
+            if f.relative_path not in visited:
+                dfs(f.relative_path, [])
+
+        return circular_files
+
+    def calculate_git_activity_scores(self, repo_path: str, files: List[str]) -> Dict[str, Tuple[int, str, float]]:
         """Calculates commit counts, last modified dates, and normalized 0-100 activity scores."""
         activity_data = {}
         file_commit_counts = {}
@@ -225,7 +278,6 @@ class RepoService:
                 file_dates[f] = dt
 
         except Exception:
-            # Non-git folder fallback
             for f in files:
                 file_commit_counts[f] = 1
                 file_dates[f] = datetime.fromtimestamp(os.path.getmtime(f))
@@ -237,18 +289,16 @@ class RepoService:
             dt = file_dates[f]
             date_str = dt.strftime("%Y-%m-%d %H:%M")
             
-            # Recency decay (days since last modification)
             days_ago = max(0, (now - dt).days)
-            recency_weight = math.exp(-days_ago / 90.0) # 90-day half-life decay
+            recency_weight = math.exp(-days_ago / 90.0)
             commit_ratio = cnt / max(1, max_commits)
             
-            # Composite Activity Score (0.0 to 100.0)
             score = round((0.6 * commit_ratio + 0.4 * recency_weight) * 100.0, 1)
             activity_data[f] = (cnt, date_str, score)
 
         return activity_data
 
-    def detect_entry_points(self, file_info_list: list[FileInfo]) -> list[str]:
+    def detect_entry_points(self, file_info_list: List[FileInfo]) -> List[str]:
         """Detects application entry points using AST heuristics and file conventions."""
         entry_points = []
 
@@ -261,15 +311,12 @@ class RepoService:
             confidence = 0.0
             base_name = os.path.basename(info.relative_path).lower()
 
-            # Filename heuristic
             if base_name in entry_filenames:
                 confidence += 0.4
 
-            # Root directory bonus
             if "/" not in info.relative_path and "\\" not in info.relative_path:
                 confidence += 0.15
 
-            # Symbol & Content AST heuristics
             symbol_names = {s.name for s in info.symbols}
             if "main" in symbol_names or "app" in symbol_names:
                 confidence += 0.25
@@ -296,18 +343,28 @@ class RepoService:
         entry_points.sort(key=lambda path: next((f.entry_point_confidence for f in file_info_list if f.relative_path == path), 0.0), reverse=True)
         return entry_points
 
-    def extract_dependency_graph(self, repo_path: str, files: list[FileInfo]) -> dict:
-        """Generates visual node/edge JSON dictionary for frontend visualizer."""
+    def extract_dependency_graph(self, repo_path: str, files: List[FileInfo], include_external: bool = True) -> Dict:
+        """Generates visual node/edge JSON dictionary with in_degree/out_degree centrality and external packages."""
         nodes = []
         edges = []
         file_map = {f.relative_path: str(idx) for idx, f in enumerate(files)}
+        external_map: Dict[str, str] = {}
+        ext_counter = len(files)
 
         for idx, f in enumerate(files):
             nodes.append({
                 "id": str(idx),
                 "label": f.file_name,
-                "title": f"{f.relative_path} (Score: {f.activity_score})",
-                "group": f.language
+                "title": f"<b>{f.relative_path}</b><br/>In-Degree: {f.in_degree} | Out-Degree: {f.out_degree}<br/>Score: {f.activity_score}",
+                "group": f.language,
+                "path": f.relative_path,
+                "in_degree": f.in_degree,
+                "out_degree": f.out_degree,
+                "is_entry_point": f.is_entry_point,
+                "is_circular": f.is_circular,
+                "activity_score": f.activity_score,
+                "symbols_count": len(f.symbols),
+                "node_type": "internal"
             })
 
         edge_set = set()
@@ -322,12 +379,48 @@ class RepoService:
                         edge_pair = (source_id, target_id)
                         if edge_pair not in edge_set:
                             edge_set.add(edge_pair)
-                            edges.append({"from": source_id, "to": target_id})
+                            edges.append({
+                                "from": source_id,
+                                "to": target_id,
+                                "title": dep.import_statement,
+                                "edge_type": "internal_import"
+                            })
+                elif include_external and not dep.is_internal and len(dep.target_path) < 40:
+                    pkg_name = dep.target_path
+                    if pkg_name not in external_map:
+                        ext_id = str(ext_counter)
+                        ext_counter += 1
+                        external_map[pkg_name] = ext_id
+                        nodes.append({
+                            "id": ext_id,
+                            "label": f"📦 {pkg_name}",
+                            "title": f"External Package: {pkg_name}",
+                            "group": "external",
+                            "path": pkg_name,
+                            "in_degree": 1,
+                            "out_degree": 0,
+                            "is_entry_point": False,
+                            "is_circular": False,
+                            "activity_score": 0.0,
+                            "symbols_count": 0,
+                            "node_type": "external_package"
+                        })
+                    
+                    ext_target_id = external_map[pkg_name]
+                    edge_pair = (source_id, ext_target_id)
+                    if edge_pair not in edge_set:
+                        edge_set.add(edge_pair)
+                        edges.append({
+                            "from": source_id,
+                            "to": ext_target_id,
+                            "title": dep.import_statement,
+                            "edge_type": "external_package"
+                        })
 
         return {"nodes": nodes, "edges": edges}
 
-    def parse_repository(self, target: str) -> tuple[bool, Optional[RepositoryIndex], str]:
-        """Main method: Parses repository into a unified RepositoryIndex object."""
+    def parse_repository(self, target: str) -> Tuple[bool, Optional[RepositoryIndex], str]:
+        """Main method: Parses repository into a unified RepositoryIndex object with dependency graph metrics."""
         success, repo_path, err_msg = self.clone_or_use_repo(target)
         if not success:
             return False, None, err_msg
@@ -339,9 +432,9 @@ class RepoService:
         activity_data = self.calculate_git_activity_scores(repo_path, raw_files)
         file_map = {os.path.relpath(f, repo_path).replace("\\", "/"): f for f in raw_files}
 
-        file_info_list: list[FileInfo] = []
+        file_info_list: List[FileInfo] = []
         total_lines = 0
-        languages_count: dict[str, int] = {}
+        languages_count: Dict[str, int] = {}
 
         for f in raw_files:
             rel_path = os.path.relpath(f, repo_path).replace("\\", "/")
@@ -349,7 +442,6 @@ class RepoService:
             lang = LANGUAGE_MAP.get(ext, "other")
             languages_count[lang] = languages_count.get(lang, 0) + 1
 
-            # Line & Size counts
             size_bytes = os.path.getsize(f)
             line_cnt = 0
             try:
@@ -379,11 +471,33 @@ class RepoService:
             )
             file_info_list.append(info)
 
+        # Compute in_degree & out_degree for every file
+        in_degree_map: Dict[str, int] = {f.relative_path: 0 for f in file_info_list}
+        out_degree_map: Dict[str, int] = {f.relative_path: 0 for f in file_info_list}
+
+        for info in file_info_list:
+            out_cnt = 0
+            for dep in info.dependencies:
+                if dep.is_internal and dep.target_path in in_degree_map:
+                    out_cnt += 1
+                    in_degree_map[dep.target_path] += 1
+            out_degree_map[info.relative_path] = out_cnt
+
+        for info in file_info_list:
+            info.in_degree = in_degree_map.get(info.relative_path, 0)
+            info.out_degree = out_degree_map.get(info.relative_path, 0)
+
+        # Circular dependency detection
+        circular_files = self.detect_circular_dependencies(file_info_list)
+        for info in file_info_list:
+            if info.relative_path in circular_files:
+                info.is_circular = True
+
         # Entry points detection
         entry_points = self.detect_entry_points(file_info_list)
         
-        # Build dependency graph
-        graph_data = self.extract_dependency_graph(repo_path, file_info_list)
+        # Build dependency graph payload
+        graph_data = self.extract_dependency_graph(repo_path, file_info_list, include_external=True)
 
         repo_index = RepositoryIndex(
             repo_name=os.path.basename(repo_path),
