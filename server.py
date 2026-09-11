@@ -9,6 +9,7 @@ import uvicorn
 from config import settings
 from services.groq_service import groq_service
 from services.repo_service import repo_service
+from models.repository_index import RepositoryIndex
 
 app = FastAPI(
     title="OnBoarding Buddy API",
@@ -25,8 +26,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Active session cache
-ACTIVE_SESSIONS = {}
+# Active session cache (session_id -> RepositoryIndex)
+ACTIVE_SESSIONS: dict[str, RepositoryIndex] = {}
 
 # --- Request Schemas ---
 class CloneRequest(BaseModel):
@@ -54,53 +55,31 @@ async def health_check():
         "port": settings.PORT
     }
 
-@app.post("/api/clone")
+@app.post("/api/clone", response_model=RepositoryIndex)
 async def clone_repository(req: CloneRequest):
     target = req.url_or_path.strip()
     if not target:
         raise HTTPException(status_code=400, detail="Repository URL or local path is required.")
     
-    success, repo_path, err_msg = repo_service.clone_or_use_repo(target)
-    if not success:
+    success, repo_index, err_msg = repo_service.parse_repository(target)
+    if not success or not repo_index:
         raise HTTPException(status_code=400, detail=err_msg)
     
     session_id = "default"
-    files = repo_service.get_repo_files(repo_path)
-    ranked_files = repo_service.rank_files_by_activity(repo_path, files)
-    
-    ACTIVE_SESSIONS[session_id] = {
-        "repo_path": repo_path,
-        "target": target,
-        "files": files,
-        "ranked_files": ranked_files
-    }
+    ACTIVE_SESSIONS[session_id] = repo_index
+    return repo_index
 
-    # Extract tree structure
-    tree = {}
-    for f in files:
-        rel_path = os.path.relpath(f, repo_path).replace("\\", "/")
-        parts = rel_path.split("/")
-        curr = tree
-        for part in parts[:-1]:
-            curr = curr.setdefault(part, {})
-        curr[parts[-1]] = {
-            "full_path": f,
-            "rel_path": rel_path,
-            "symbols": repo_service.parse_file_symbols(f)
-        }
-
-    return {
-        "session_id": session_id,
-        "repo_name": os.path.basename(repo_path),
-        "total_files": len(files),
-        "tree": tree,
-        "ranked_files": ranked_files
-    }
+@app.get("/api/index", response_model=RepositoryIndex)
+async def get_repository_index(session_id: str = "default"):
+    session = ACTIVE_SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+    return session
 
 @app.get("/api/file-content")
 async def get_file_content(file_path: str = Query(...)):
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=444, detail="File not found.")
+        raise HTTPException(status_code=404, detail="File not found.")
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -123,7 +102,7 @@ async def summarize_file(req: SummarizeRequest):
             code_content = f.read()
         rel_path = os.path.basename(req.file_path)
         if session:
-            rel_path = os.path.relpath(req.file_path, session["repo_path"]).replace("\\", "/")
+            rel_path = os.path.relpath(req.file_path, session.repo_path).replace("\\", "/")
             
         summary_result = groq_service.summarize_code(rel_path, code_content)
         return summary_result
@@ -136,11 +115,14 @@ async def generate_guide(req: GenerateGuideRequest):
     if not session:
         raise HTTPException(status_code=400, detail="No active repository session found. Please analyze a repo first.")
     
-    repo_name = os.path.basename(session["repo_path"])
-    file_list = [f["rel_path"] for f in session["ranked_files"][:15]]
+    repo_name = session.repo_name
+    ranked_files = sorted(session.files, key=lambda f: f.activity_score, reverse=True)
+    file_list = [f.relative_path for f in ranked_files[:15]]
     file_tree_str = "\n".join(file_list)
     
-    guide_markdown = groq_service.generate_onboarding_guide(repo_name, file_tree_str, session["ranked_files"][:10])
+    key_files_meta = [{"rel_path": f.relative_path, "activity_score": f.activity_score, "is_entry_point": f.is_entry_point} for f in ranked_files[:10]]
+    
+    guide_markdown = groq_service.generate_onboarding_guide(repo_name, file_tree_str, key_files_meta)
     return {
         "repo_name": repo_name,
         "guide": guide_markdown
@@ -151,8 +133,9 @@ async def repo_chat(req: ChatRequest):
     session = ACTIVE_SESSIONS.get(req.session_id)
     repo_context = "No repo loaded yet."
     if session:
-        top_files = [f["rel_path"] for f in session["ranked_files"][:15]]
-        repo_context = f"Repo: {os.path.basename(session['repo_path'])}\nKey Files: {', '.join(top_files)}"
+        top_files = [f.relative_path for f in sorted(session.files, key=lambda f: f.activity_score, reverse=True)[:15]]
+        entry_pts = session.entry_points
+        repo_context = f"Repo: {session.repo_name}\nEntry Points: {', '.join(entry_pts)}\nKey Files: {', '.join(top_files)}"
     
     answer = groq_service.chat_with_repository(req.question, repo_context)
     return {"answer": answer}
@@ -163,8 +146,7 @@ async def get_graph(session_id: str = "default"):
     if not session:
         return {"nodes": [], "edges": []}
     
-    graph_data = repo_service.extract_dependency_graph(session["repo_path"], session["files"])
-    return graph_data
+    return session.dependency_graph
 
 # Mount frontend static files
 frontend_path = os.path.join(os.path.dirname(__file__), "frontend")

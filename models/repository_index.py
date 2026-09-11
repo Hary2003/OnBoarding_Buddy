@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 class Symbol(BaseModel):
     name: str = Field(..., description="Name of the function, class, method, or symbol")
@@ -41,4 +41,4 @@ class RepositoryIndex(BaseModel):
     entry_points: List[str] = Field(default_factory=list, description="List of detected entry point relative paths")
     files: List[FileInfo] = Field(default_factory=list, description="List of FileInfo objects for all files")
     dependency_graph: Dict[str, Any] = Field(default_factory=dict, description="Nodes and edges payload for visual graph")
-    indexed_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat(), description="ISO timestamp of indexing execution")
+    indexed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="ISO timestamp of indexing execution")

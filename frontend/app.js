@@ -68,8 +68,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!target) return;
 
         analyzeBtn.disabled = true;
-        analyzeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing...`;
-        treeContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Cloning & analyzing repository structure...</p></div>`;
+        analyzeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Indexing...`;
+        treeContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Parsing AST, computing activity scores, and detecting entry points...</p></div>`;
 
         try {
             const res = await fetch("/api/clone", {
@@ -83,17 +83,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 throw new Error(err.detail || "Failed to analyze repository.");
             }
 
-            const data = await res.json();
-            currentSession = data;
-            fileCount.textContent = `${data.total_files} files`;
+            // RepositoryIndex object received
+            const repoIndex = await res.json();
+            currentSession = repoIndex;
+            fileCount.textContent = `${repoIndex.total_files} files (${repoIndex.total_lines} lines)`;
             
-            renderRankedFiles(data.ranked_files);
+            renderFilesIndex(repoIndex.files);
             analyzeBtn.disabled = false;
             analyzeBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Repo`;
 
-            // Auto-select first file if available
-            if (data.ranked_files.length > 0) {
-                loadFileContent(data.ranked_files[0].full_path, data.ranked_files[0].rel_path);
+            // Auto-select first entry point or highest ranked file
+            if (repoIndex.files.length > 0) {
+                const topFile = repoIndex.files.find(f => f.is_entry_point) || repoIndex.files[0];
+                loadFileContent(topFile.full_path, topFile.relative_path);
             }
 
         } catch (err) {
@@ -103,29 +105,38 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Render File List Ranked by Git Activity
-    function renderRankedFiles(rankedFiles) {
-        if (!rankedFiles || rankedFiles.length === 0) {
+    // Render Files List from RepositoryIndex
+    function renderFilesIndex(files) {
+        if (!files || files.length === 0) {
             treeContainer.innerHTML = `<div class="empty-state"><p>No supported code files found.</p></div>`;
             return;
         }
 
+        // Sort by activity score descending
+        const sortedFiles = [...files].sort((a, b) => b.activity_score - a.activity_score);
+
         treeContainer.innerHTML = "";
-        rankedFiles.forEach(file => {
+        sortedFiles.forEach(file => {
             const node = document.createElement("div");
             node.className = "tree-node";
+            
+            const entryBadge = file.is_entry_point 
+                ? `<span class="badge badge-purple" style="font-size:10px; margin-left:4px;">🚀 Entry</span>` 
+                : "";
+
             node.innerHTML = `
                 <div class="node-info">
                     <i class="fa-regular fa-file-code"></i>
-                    <span>${file.rel_path}</span>
+                    <span>${file.relative_path}</span>
+                    ${entryBadge}
                 </div>
-                <span class="node-meta">${file.last_modified}</span>
+                <span class="node-meta">Score: ${file.activity_score}</span>
             `;
 
             node.addEventListener("click", () => {
                 document.querySelectorAll(".tree-node").forEach(n => n.classList.remove("active"));
                 node.classList.add("active");
-                loadFileContent(file.full_path, file.rel_path);
+                loadFileContent(file.full_path, file.relative_path);
             });
 
             treeContainer.appendChild(node);
@@ -237,7 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 title: n.title,
                 shape: 'dot',
                 size: 16,
-                color: n.group === 'python' ? '#6366f1' : (n.group === 'javascript' ? '#f59e0b' : '#06b6d4')
+                color: n.group === 'python' ? '#6366f1' : (n.group === 'javascript' || n.group === 'typescript' ? '#f59e0b' : '#06b6d4')
             })));
 
             const edges = new vis.DataSet(data.edges.map(e => ({
@@ -274,11 +285,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const question = chatInput.value.trim();
         if (!question) return;
 
-        // Append user msg
         appendMessage("user", question);
         chatInput.value = "";
 
-        // Placeholder assistant msg
         const assistantMsgEl = appendMessage("assistant", `<i class="fa-solid fa-spinner fa-spin"></i> Thinking...`);
 
         try {
