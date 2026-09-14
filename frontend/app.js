@@ -57,6 +57,45 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     checkHealth();
 
+    // Auto-restore active session from server or auto-index default repository
+    async function autoLoadSession() {
+        try {
+            const res = await fetch("/api/index?session_id=default");
+            if (res.ok) {
+                const repoIndex = await res.json();
+                currentSession = repoIndex;
+                fileCount.textContent = `${repoIndex.total_files} files (${repoIndex.total_lines} lines)`;
+                renderFilesIndex(repoIndex.files);
+                if (repoIndex.files.length > 0) {
+                    const topFile = repoIndex.files.find(f => f.is_entry_point) || repoIndex.files[0];
+                    loadFileContent(topFile.full_path, topFile.relative_path);
+                }
+            } else {
+                const target = repoInput.value.trim();
+                if (target) {
+                    const cloneRes = await fetch("/api/clone", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ url_or_path: target })
+                    });
+                    if (cloneRes.ok) {
+                        const repoIndex = await cloneRes.json();
+                        currentSession = repoIndex;
+                        fileCount.textContent = `${repoIndex.total_files} files (${repoIndex.total_lines} lines)`;
+                        renderFilesIndex(repoIndex.files);
+                        if (repoIndex.files.length > 0) {
+                            const topFile = repoIndex.files.find(f => f.is_entry_point) || repoIndex.files[0];
+                            loadFileContent(topFile.full_path, topFile.relative_path);
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("Auto-load session notice:", err.message);
+        }
+    }
+    autoLoadSession();
+
     // Tab Switching Logic
     const tabBtns = document.querySelectorAll(".tab-btn");
     const tabPanes = document.querySelectorAll(".tab-pane");
@@ -438,6 +477,18 @@ document.addEventListener("DOMContentLoaded", () => {
         return msgDiv;
     }
 
+    // Preset Issue Buttons Handler
+    document.querySelectorAll(".preset-issue-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (issueTitle) issueTitle.value = btn.dataset.title || "";
+            if (issueDesc) issueDesc.value = btn.dataset.desc || "";
+            if (contribForm) {
+                contribForm.dispatchEvent(new Event("submit", { cancelable: true }));
+            }
+        });
+    });
+
     // Contribution Intelligence Form Handler
     const contribForm = document.getElementById("contribution-form");
     const issueTitle = document.getElementById("issue-title");
@@ -447,21 +498,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (contribForm) {
         contribForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const title = issueTitle.value.trim();
-            const desc = issueDesc.value.trim();
+            if (e && e.preventDefault) e.preventDefault();
+            const title = issueTitle ? issueTitle.value.trim() : "";
+            const desc = issueDesc ? issueDesc.value.trim() : "";
             if (!title) return;
 
-            if (!currentSession) {
-                alert("Please analyze a repository first.");
-                return;
+            if (analyzeContribBtn) {
+                analyzeContribBtn.disabled = true;
+                analyzeContribBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing Issue & Impact...`;
+            }
+            if (contributionContent) {
+                contributionContent.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Mapping issue requirements to repository files and graph impact...</h3></div>`;
             }
 
-            analyzeContribBtn.disabled = true;
-            analyzeContribBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing Issue & Impact...`;
-            contributionContent.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Mapping issue requirements to repository files and graph impact...</h3></div>`;
-
             try {
+                // If session is missing, auto-index target repository first
+                if (!currentSession) {
+                    const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
+                    const cloneRes = await fetch("/api/clone", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
+                    });
+                    if (!cloneRes.ok) {
+                        const err = await cloneRes.json();
+                        throw new Error(err.detail || "Repository indexing failed.");
+                    }
+                    currentSession = await cloneRes.json();
+                    if (fileCount) fileCount.textContent = `${currentSession.total_files} files (${currentSession.total_lines} lines)`;
+                    if (typeof renderFilesIndex === "function") renderFilesIndex(currentSession.files);
+                }
+
                 const res = await fetch("/api/contribution/analyze", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -478,14 +545,22 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 const data = await res.json();
 
-                contributionContent.innerHTML = marked.parse(data.plan_narrative);
-                analyzeContribBtn.disabled = false;
-                analyzeContribBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution`;
+                if (contributionContent) {
+                    contributionContent.innerHTML = marked.parse(data.plan_narrative);
+                }
+                if (analyzeContribBtn) {
+                    analyzeContribBtn.disabled = false;
+                    analyzeContribBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution`;
+                }
 
             } catch (err) {
-                contributionContent.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">❌ ${err.message}</p></div>`;
-                analyzeContribBtn.disabled = false;
-                analyzeContribBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution`;
+                if (contributionContent) {
+                    contributionContent.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">❌ ${err.message}</p></div>`;
+                }
+                if (analyzeContribBtn) {
+                    analyzeContribBtn.disabled = false;
+                    analyzeContribBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution`;
+                }
             }
         });
     }

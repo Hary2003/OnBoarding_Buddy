@@ -265,6 +265,12 @@
                                 <label style="display:block; font-weight:600; margin-bottom:4px;">Issue Description:</label>
                                 <textarea id="issue-desc" class="select-input" style="width:100%; height:80px; padding:10px; font-family:inherit;" placeholder="e.g. The application should reuse database connections and allow pool size to be configured via environment variables."></textarea>
                             </div>
+                            <div style="margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                                <span style="font-size: 12px; color: #94a3b8; font-weight: 500;">Quick Presets:</span>
+                                <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Fix bug in auth middleware token expiration" data-desc="Token validation in middleware fails to handle expired JWT tokens gracefully.">🔐 Fix Auth Expiration</button>
+                                <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Add caching layer for repository index retrieval" data-desc="Improve performance by adding in-memory TTL caching for graph queries.">⚡ Add Caching Layer</button>
+                                <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Refactor dependency graph traversal for cycle detection" data-desc="Optimize memory usage during circular dependency detection in large codebases.">🔄 Refactor Cycle Detection</button>
+                            </div>
                             <button type="submit" id="analyze-contrib-btn" class="btn btn-primary">
                                 <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution
                             </button>
