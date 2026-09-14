@@ -2,6 +2,7 @@ import os
 import ast
 import re
 import math
+import posixpath
 import tempfile
 import shutil
 import stat
@@ -10,7 +11,7 @@ from typing import Optional, List, Dict, Set, Tuple
 from datetime import datetime
 from git import Repo, GitCommandError
 
-from models.repository_index import Symbol, Dependency, FileInfo, RepositoryIndex, GraphNode, GraphEdge
+from models.repository_index import Symbol, Dependency, FileInfo, RepositoryIndex, GraphNode, GraphEdge, CycleDetail, ArchitectureSummary
 
 IGNORE_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build", ".idea", ".vscode", "tmp", "temp"}
 SUPPORTED_EXTENSIONS = {
@@ -90,7 +91,7 @@ class RepoService:
                             docstring = ast.get_docstring(n) or ""
                             args = [a.arg for a in n.args.args]
                             end_line = max([c.lineno for c in ast.walk(n) if hasattr(c, "lineno")], default=n.lineno)
-                            return_type = ast.unparse(n.returns) if n.returns else None
+                            return_type = ast.unparse(n.returns) if hasattr(ast, "unparse") and n.returns else None
                             symbols.append(Symbol(
                                 name=n.name,
                                 type="function",
@@ -146,8 +147,72 @@ class RepoService:
 
         return symbols
 
+    def _resolve_python_import(self, source_rel: str, mod_str: str, level: int, file_map: Dict[str, str]) -> Tuple[Optional[str], bool, str]:
+        """Resolves Python module import to internal repository relative path or external package."""
+        source_dir = posixpath.dirname(source_rel)
+
+        if level > 0:
+            # Relative import (e.g. level 1 = ., level 2 = ..)
+            curr_dir = source_dir
+            for _ in range(level - 1):
+                curr_dir = posixpath.dirname(curr_dir)
+
+            mod_path = mod_str.replace(".", "/") if mod_str else ""
+            candidates = []
+            if mod_path:
+                candidates.extend([
+                    posixpath.normpath(posixpath.join(curr_dir, f"{mod_path}.py")),
+                    posixpath.normpath(posixpath.join(curr_dir, mod_path, "__init__.py")),
+                ])
+            else:
+                candidates.append(posixpath.normpath(posixpath.join(curr_dir, "__init__.py")))
+
+            for cand in candidates:
+                if cand in file_map:
+                    return cand, True, "relative"
+
+        # Absolute / package-style import (e.g. services.repo_service or models)
+        mod_path = mod_str.replace(".", "/")
+        candidates = [
+            f"{mod_path}.py",
+            f"{mod_path}/__init__.py",
+            mod_path
+        ]
+        for cand in candidates:
+            if cand in file_map:
+                return cand, True, "package"
+
+        # Match base name fallback
+        base = mod_str.split(".")[0]
+        for rel_path in file_map.keys():
+            if rel_path == f"{base}.py" or rel_path.startswith(f"{base}/"):
+                return rel_path, True, "package"
+
+        return mod_str, False, "external"
+
+    def _resolve_jsts_import(self, source_rel: str, import_path: str, file_map: Dict[str, str]) -> Tuple[Optional[str], bool, str]:
+        """Resolves JS/TS import path to internal file or external package."""
+        clean_path = import_path.split("?")[0].split("#")[0]
+        
+        if clean_path.startswith(".") or clean_path.startswith("/"):
+            source_dir = posixpath.dirname(source_rel)
+            resolved_base = posixpath.normpath(posixpath.join(source_dir, clean_path))
+            
+            extensions = ["", ".ts", ".tsx", ".js", ".jsx", ".json", "/index.ts", "/index.tsx", "/index.js", "/index.jsx"]
+            for ext in extensions:
+                cand = resolved_base + ext
+                if cand in file_map:
+                    return cand, True, "relative"
+        
+        # Check matching internal alias or file name
+        for rel_path in file_map.keys():
+            if rel_path.endswith(clean_path) or os.path.splitext(os.path.basename(rel_path))[0] == clean_path:
+                return rel_path, True, "internal_alias"
+
+        return clean_path, False, "external_package"
+
     def extract_dependencies(self, file_path: str, repo_path: str, file_map: Dict[str, str]) -> List[Dependency]:
-        """Precise AST & pattern import extraction resolving internal files vs external packages."""
+        """Precise multi-language import extraction and path resolution."""
         deps: List[Dependency] = []
         source_rel = os.path.relpath(file_path, repo_path).replace("\\", "/")
         ext = os.path.splitext(file_path)[1].lower()
@@ -156,7 +221,7 @@ class RepoService:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
 
-            raw_imports: List[Tuple[str, str]] = [] # (module_path, statement)
+            raw_imports: List[Tuple[str, str, int, str]] = [] # (mod_str, statement, level, import_kind)
 
             # Python AST import parsing
             if ext == ".py":
@@ -165,51 +230,101 @@ class RepoService:
                     for n in ast.walk(tree):
                         if isinstance(n, ast.Import):
                             for alias in n.names:
-                                raw_imports.append((alias.name, f"import {alias.name}"))
+                                raw_imports.append((alias.name, f"import {alias.name}", 0, "py"))
                         elif isinstance(n, ast.ImportFrom):
                             mod = n.module or ""
                             dots = "." * n.level
-                            full_mod = f"{dots}{mod}"
-                            for alias in n.names:
-                                raw_imports.append((f"{full_mod}.{alias.name}", f"from {full_mod} import {alias.name}"))
+                            full_stmt = f"from {dots}{mod} import ..."
+                            raw_imports.append((mod, full_stmt, n.level, "py"))
                 except SyntaxError:
                     pass
 
             # JS/TS ES6 & CommonJS import parsing
-            if ext in [".js", ".ts", ".jsx", ".tsx"]:
-                matches = re.findall(r'(?:import|from|require)\s*\(?[\'"]([^\'"]+)[\'"]\)?', content)
-                for m in matches:
-                    raw_imports.append((m, f"import {m}"))
+            elif ext in [".js", ".ts", ".jsx", ".tsx"]:
+                # match import x from 'y', import 'y', require('y'), export * from 'y'
+                patterns = [
+                    r'(?:import|from|require|export)\s*\(?\s*[\'"]([^\'"]+)[\'"]\s*\)?',
+                    r'import\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)'
+                ]
+                for pattern in patterns:
+                    for m in re.findall(pattern, content):
+                        raw_imports.append((m, f"import {m}", 0, "jsts"))
 
-            # Go & Java imports
-            if ext in [".go", ".java", ".cs"]:
-                matches = re.findall(r'import\s+(?:[\w.]+\s+)?[\'"]?([^\'"\s;]+)[\'"]?', content)
+            # Go imports
+            elif ext == ".go":
+                matches = re.findall(r'import\s+(?:[\w.]+\s+)?[\'"]([^\'"]+)[\'"]', content)
                 for m in matches:
-                    raw_imports.append((m, f"import {m}"))
+                    raw_imports.append((m, f"import {m}", 0, "go"))
 
-            # Resolve targets against repository internal file_map
-            seen_targets = set()
-            for mod_str, raw_stmt in raw_imports:
+            # C / C++ includes
+            elif ext in [".c", ".cpp", ".h"]:
+                local_includes = re.findall(r'#include\s+"([^"]+)"', content)
+                for inc in local_includes:
+                    raw_imports.append((inc, f'#include "{inc}"', 0, "c_local"))
+                sys_includes = re.findall(r'#include\s+<([^>]+)>', content)
+                for inc in sys_includes:
+                    raw_imports.append((inc, f'#include <{inc}>', 0, "c_sys"))
+
+            # Java / C# / Rust imports
+            elif ext in [".java", ".cs", ".rs"]:
+                matches = re.findall(r'(?:import|using|use)\s+([a-zA-Z0-9_.:*]+);?', content)
+                for m in matches:
+                    raw_imports.append((m, f"import {m}", 0, "other"))
+
+            seen_keys = set()
+            for mod_str, raw_stmt, level, kind in raw_imports:
                 target_path = mod_str
+                resolved_path = None
                 is_internal = False
+                import_type = "external"
 
-                for rel_path in file_map.keys():
-                    base_name = os.path.splitext(os.path.basename(rel_path))[0]
-                    dotted_path = rel_path.replace("/", ".").replace(".py", "")
-
-                    if (mod_str and mod_str.startswith(".")) or base_name == mod_str or mod_str in dotted_path or rel_path in mod_str:
-                        target_path = rel_path
+                if kind == "py":
+                    resolved_cand, is_int, imp_t = self._resolve_python_import(source_rel, mod_str, level, file_map)
+                    target_path = resolved_cand if is_int else mod_str
+                    resolved_path = resolved_cand if is_int else None
+                    is_internal = is_int
+                    import_type = imp_t
+                elif kind == "jsts":
+                    resolved_cand, is_int, imp_t = self._resolve_jsts_import(source_rel, mod_str, file_map)
+                    target_path = resolved_cand if is_int else mod_str
+                    resolved_path = resolved_cand if is_int else None
+                    is_internal = is_int
+                    import_type = imp_t
+                elif kind == "c_local":
+                    source_dir = posixpath.dirname(source_rel)
+                    cand = posixpath.normpath(posixpath.join(source_dir, mod_str))
+                    if cand in file_map:
+                        target_path = cand
+                        resolved_path = cand
                         is_internal = True
-                        break
+                        import_type = "header_local"
+                    else:
+                        is_internal = False
+                        import_type = "header_external"
+                elif kind == "c_sys":
+                    is_internal = False
+                    import_type = "header_system"
+                else:
+                    # Match against file_map
+                    for rel_path in file_map.keys():
+                        base = os.path.splitext(os.path.basename(rel_path))[0]
+                        if base and base in mod_str:
+                            target_path = rel_path
+                            resolved_path = rel_path
+                            is_internal = True
+                            import_type = "package"
+                            break
 
-                edge_key = (source_rel, target_path)
-                if edge_key not in seen_targets:
-                    seen_targets.add(edge_key)
+                key = (source_rel, target_path)
+                if key not in seen_keys and source_rel != target_path:
+                    seen_keys.add(key)
                     deps.append(Dependency(
                         source_path=source_rel,
                         target_path=target_path,
                         import_statement=raw_stmt[:120],
-                        is_internal=is_internal
+                        is_internal=is_internal,
+                        resolved_path=resolved_path,
+                        import_type=import_type
                     ))
 
         except Exception:
@@ -217,8 +332,8 @@ class RepoService:
 
         return deps
 
-    def detect_circular_dependencies(self, file_info_list: List[FileInfo]) -> Set[str]:
-        """Detects circular dependency cycles (A -> B -> A) using Tarjan's / DFS cycle detection."""
+    def detect_circular_dependencies(self, file_info_list: List[FileInfo]) -> Tuple[Set[str], List[CycleDetail]]:
+        """Detects circular dependency cycles (A -> B -> A) and returns affected files and detailed cycle paths."""
         graph: Dict[str, Set[str]] = {f.relative_path: set() for f in file_info_list}
         for f in file_info_list:
             for dep in f.dependencies:
@@ -226,6 +341,9 @@ class RepoService:
                     graph[f.relative_path].add(dep.target_path)
 
         circular_files: Set[str] = set()
+        detected_cycles: List[CycleDetail] = []
+        seen_cycle_tuples: Set[Tuple[str, ...]] = set()
+
         visited: Set[str] = set()
         rec_stack: Set[str] = set()
 
@@ -240,8 +358,24 @@ class RepoService:
                 elif neighbor in rec_stack:
                     # Cycle found!
                     cycle_start_idx = path.index(neighbor) if neighbor in path else 0
-                    for cycle_node in path[cycle_start_idx:]:
+                    cycle_path = path[cycle_start_idx:] + [neighbor]
+                    
+                    for cycle_node in cycle_path[:-1]:
                         circular_files.add(cycle_node)
+
+                    # Deduplicate cycle representation
+                    cycle_body = cycle_path[:-1]
+                    min_idx = cycle_body.index(min(cycle_body))
+                    norm_cycle = tuple(cycle_body[min_idx:] + cycle_body[:min_idx])
+                    
+                    if norm_cycle not in seen_cycle_tuples:
+                        seen_cycle_tuples.add(norm_cycle)
+                        cycle_id = f"cycle_{len(detected_cycles) + 1}"
+                        detected_cycles.append(CycleDetail(
+                            cycle_id=cycle_id,
+                            path=cycle_path,
+                            cycle_length=len(cycle_path) - 1
+                        ))
 
             rec_stack.remove(node)
             path.pop()
@@ -250,7 +384,74 @@ class RepoService:
             if f.relative_path not in visited:
                 dfs(f.relative_path, [])
 
-        return circular_files
+        return circular_files, detected_cycles
+
+    def classify_modules(self, file_info_list: List[FileInfo], entry_points: List[str]) -> Dict[str, int]:
+        """Categorizes files into core, leaf, utility, entry_point, isolated, or standard."""
+        counts = {"core": 0, "leaf": 0, "utility": 0, "entry_point": 0, "isolated": 0, "standard": 0}
+        entry_set = set(entry_points)
+
+        for info in file_info_list:
+            category = "standard"
+
+            if info.relative_path in entry_set or info.is_entry_point:
+                category = "entry_point"
+            elif info.in_degree == 0 and info.out_degree == 0:
+                category = "isolated"
+            elif info.out_degree == 0 and info.in_degree >= 1:
+                category = "utility"
+            elif info.out_degree == 0 and info.in_degree == 0:
+                category = "leaf"
+            elif info.in_degree >= 2 or (info.in_degree >= 1 and info.in_degree > info.out_degree):
+                category = "core"
+            else:
+                category = "standard"
+
+            info.module_category = category
+            counts[category] += 1
+
+        return counts
+
+    def generate_architecture_summary(self, repo_index: RepositoryIndex) -> ArchitectureSummary:
+        """Generates structured architectural breakdown from repository index metrics."""
+        files = repo_index.files
+        entry_pts = repo_index.entry_points
+        
+        # Sort core modules by in_degree descending
+        core_files = [f.relative_path for f in sorted(files, key=lambda f: f.in_degree, reverse=True) if f.module_category == "core" or f.in_degree >= 1][:8]
+        leaf_util_files = [f.relative_path for f in files if f.module_category in ["utility", "leaf"]][:8]
+        
+        # Determine likely architectural pattern
+        langs = repo_index.languages_breakdown
+        primary_lang = max(langs, key=langs.get) if langs else "unknown"
+
+        arch_type = "Modular Component Architecture"
+        if "python" in langs and any("fastapi" in f.full_path.lower() or "app.py" in f.relative_path or "server.py" in f.relative_path for f in files):
+            arch_type = "FastAPI Modular Web Service"
+        elif "javascript" in langs or "typescript" in langs:
+            arch_type = "Fullstack Node.js / Web Application"
+        elif len(files) <= 5:
+            arch_type = "Compact Script / Service"
+        elif len(core_files) >= 3:
+            arch_type = "Layered Architecture with Core Utility Layer"
+
+        narrative = (
+            f"The codebase '{repo_index.repo_name}' follows a {arch_type} pattern written primarily in {primary_lang.capitalize()}. "
+            f"It comprises {repo_index.total_files} source files totaling {repo_index.total_lines} lines of code across "
+            f"{len(langs)} language group(s). "
+            f"Key application entry point(s): {', '.join(entry_pts[:3]) if entry_pts else 'None detected'}. "
+            f"Central core module hubs: {', '.join(core_files[:4]) if core_files else 'None'}. "
+            f"Circular import cycles: {len(repo_index.circular_cycles)} cycle(s) detected."
+        )
+
+        return ArchitectureSummary(
+            architecture_type=arch_type,
+            entry_points_summary=entry_pts,
+            core_modules=core_files,
+            leaf_utility_modules=leaf_util_files,
+            circular_dependencies_count=len(repo_index.circular_cycles),
+            overview_narrative=narrative
+        )
 
     def calculate_git_activity_scores(self, repo_path: str, files: List[str]) -> Dict[str, Tuple[int, str, float]]:
         """Calculates commit counts, last modified dates, and normalized 0-100 activity scores."""
@@ -355,7 +556,7 @@ class RepoService:
             nodes.append({
                 "id": str(idx),
                 "label": f.file_name,
-                "title": f"<b>{f.relative_path}</b><br/>In-Degree: {f.in_degree} | Out-Degree: {f.out_degree}<br/>Score: {f.activity_score}",
+                "title": f"<b>{f.relative_path}</b><br/>Category: {f.module_category.upper()}<br/>In-Degree: {f.in_degree} | Out-Degree: {f.out_degree}<br/>Score: {f.activity_score}",
                 "group": f.language,
                 "path": f.relative_path,
                 "in_degree": f.in_degree,
@@ -364,7 +565,8 @@ class RepoService:
                 "is_circular": f.is_circular,
                 "activity_score": f.activity_score,
                 "symbols_count": len(f.symbols),
-                "node_type": "internal"
+                "node_type": "internal",
+                "module_category": f.module_category
             })
 
         edge_set = set()
@@ -373,8 +575,9 @@ class RepoService:
             if not source_id: continue
 
             for dep in f.dependencies:
-                if dep.is_internal and dep.target_path in file_map:
-                    target_id = file_map[dep.target_path]
+                target_rel = dep.resolved_path or dep.target_path
+                if dep.is_internal and target_rel in file_map:
+                    target_id = file_map[target_rel]
                     if source_id != target_id:
                         edge_pair = (source_id, target_id)
                         if edge_pair not in edge_set:
@@ -403,7 +606,8 @@ class RepoService:
                             "is_circular": False,
                             "activity_score": 0.0,
                             "symbols_count": 0,
-                            "node_type": "external_package"
+                            "node_type": "external_package",
+                            "module_category": "external"
                         })
                     
                     ext_target_id = external_map[pkg_name]
@@ -478,9 +682,10 @@ class RepoService:
         for info in file_info_list:
             out_cnt = 0
             for dep in info.dependencies:
-                if dep.is_internal and dep.target_path in in_degree_map:
+                target_rel = dep.resolved_path or dep.target_path
+                if dep.is_internal and target_rel in in_degree_map:
                     out_cnt += 1
-                    in_degree_map[dep.target_path] += 1
+                    in_degree_map[target_rel] += 1
             out_degree_map[info.relative_path] = out_cnt
 
         for info in file_info_list:
@@ -488,7 +693,7 @@ class RepoService:
             info.out_degree = out_degree_map.get(info.relative_path, 0)
 
         # Circular dependency detection
-        circular_files = self.detect_circular_dependencies(file_info_list)
+        circular_files, circular_cycles = self.detect_circular_dependencies(file_info_list)
         for info in file_info_list:
             if info.relative_path in circular_files:
                 info.is_circular = True
@@ -496,6 +701,9 @@ class RepoService:
         # Entry points detection
         entry_points = self.detect_entry_points(file_info_list)
         
+        # Classify modules (core, leaf, utility, entry_point, isolated, standard)
+        module_counts = self.classify_modules(file_info_list, entry_points)
+
         # Build dependency graph payload
         graph_data = self.extract_dependency_graph(repo_path, file_info_list, include_external=True)
 
@@ -506,9 +714,15 @@ class RepoService:
             total_lines=total_lines,
             languages_breakdown=languages_count,
             entry_points=entry_points,
+            circular_cycles=circular_cycles,
+            module_counts=module_counts,
             files=file_info_list,
             dependency_graph=graph_data
         )
+
+        # Generate architecture summary
+        arch_summary = self.generate_architecture_summary(repo_index)
+        repo_index.architecture_summary = arch_summary
 
         return True, repo_index, ""
 

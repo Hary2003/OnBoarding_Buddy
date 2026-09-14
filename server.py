@@ -1,4 +1,5 @@
 import os
+from typing import Optional, Dict, List
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -140,11 +141,12 @@ async def repo_chat(req: ChatRequest):
     answer = groq_service.chat_with_repository(req.question, repo_context)
     return {"answer": answer}
 
+@app.get("/api/dependencies")
 @app.get("/api/graph")
-async def get_graph(
+async def get_dependencies(
     session_id: str = "default",
     include_external: bool = Query(True),
-    filter_type: str = Query("all")  # all, core, entry, circular
+    filter_type: str = Query("all")  # all, core, leaf, utility, entry, circular, isolated
 ):
     session = ACTIVE_SESSIONS.get(session_id)
     if not session:
@@ -153,13 +155,15 @@ async def get_graph(
     graph_data = repo_service.extract_dependency_graph(session.repo_path, session.files, include_external=include_external)
     
     if filter_type == "core":
-        # Keep nodes with in_degree >= 1 or top centrality
-        valid_node_ids = {n["id"] for n in graph_data["nodes"] if n["in_degree"] >= 1 or n["node_type"] == "external_package"}
+        valid_node_ids = {n["id"] for n in graph_data["nodes"] if n.get("module_category") == "core" or n["in_degree"] >= 1 or n["node_type"] == "external_package"}
+        graph_data["nodes"] = [n for n in graph_data["nodes"] if n["id"] in valid_node_ids]
+        graph_data["edges"] = [e for e in graph_data["edges"] if e["from"] in valid_node_ids and e["to"] in valid_node_ids]
+    elif filter_type in ["leaf", "utility"]:
+        valid_node_ids = {n["id"] for n in graph_data["nodes"] if n.get("module_category") in ["leaf", "utility"]}
         graph_data["nodes"] = [n for n in graph_data["nodes"] if n["id"] in valid_node_ids]
         graph_data["edges"] = [e for e in graph_data["edges"] if e["from"] in valid_node_ids and e["to"] in valid_node_ids]
     elif filter_type == "entry":
         valid_node_ids = {n["id"] for n in graph_data["nodes"] if n["is_entry_point"]}
-        # Also include direct downstream targets from entry points
         downstream_ids = {e["to"] for e in graph_data["edges"] if e["from"] in valid_node_ids}
         valid_node_ids.update(downstream_ids)
         graph_data["nodes"] = [n for n in graph_data["nodes"] if n["id"] in valid_node_ids]
@@ -168,8 +172,80 @@ async def get_graph(
         valid_node_ids = {n["id"] for n in graph_data["nodes"] if n["is_circular"]}
         graph_data["nodes"] = [n for n in graph_data["nodes"] if n["id"] in valid_node_ids]
         graph_data["edges"] = [e for e in graph_data["edges"] if e["from"] in valid_node_ids and e["to"] in valid_node_ids]
+    elif filter_type == "isolated":
+        valid_node_ids = {n["id"] for n in graph_data["nodes"] if n.get("module_category") == "isolated"}
+        graph_data["nodes"] = [n for n in graph_data["nodes"] if n["id"] in valid_node_ids]
+        graph_data["edges"] = [e for e in graph_data["edges"] if e["from"] in valid_node_ids and e["to"] in valid_node_ids]
 
     return graph_data
+
+@app.get("/api/dependencies/modules")
+async def get_dependency_modules(session_id: str = "default", category: Optional[str] = Query(None)):
+    session = ACTIVE_SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+    
+    files = session.files
+    if category:
+        files = [f for f in files if f.module_category.lower() == category.lower()]
+    
+    categorized_summary = {
+        "repo_name": session.repo_name,
+        "total_files": len(files),
+        "module_counts": session.module_counts,
+        "modules": [
+            {
+                "file_name": f.file_name,
+                "relative_path": f.relative_path,
+                "module_category": f.module_category,
+                "in_degree": f.in_degree,
+                "out_degree": f.out_degree,
+                "is_entry_point": f.is_entry_point,
+                "is_circular": f.is_circular,
+                "dependencies_count": len(f.dependencies)
+            }
+            for f in files
+        ]
+    }
+    return categorized_summary
+
+@app.get("/api/dependencies/cycles")
+async def get_circular_dependency_cycles(session_id: str = "default"):
+    session = ACTIVE_SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+    
+    return {
+        "repo_name": session.repo_name,
+        "total_cycles": len(session.circular_cycles),
+        "cycles": session.circular_cycles
+    }
+
+@app.get("/api/architecture")
+async def get_architecture_summary(session_id: str = "default", use_llm: bool = Query(False)):
+    session = ACTIVE_SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+    
+    arch_summary = session.architecture_summary or repo_service.generate_architecture_summary(session)
+    
+    if use_llm and settings.is_groq_configured:
+        llm_narrative = groq_service.generate_architecture_insight(
+            repo_name=session.repo_name,
+            total_files=session.total_files,
+            total_lines=session.total_lines,
+            entry_points=session.entry_points,
+            core_modules=arch_summary.core_modules,
+            leaf_modules=arch_summary.leaf_utility_modules,
+            circular_count=arch_summary.circular_dependencies_count,
+            languages=session.languages_breakdown
+        )
+        arch_summary.overview_narrative = llm_narrative
+
+    return {
+        "repo_name": session.repo_name,
+        "architecture_summary": arch_summary
+    }
 
 # Mount frontend static files
 frontend_path = os.path.join(os.path.dirname(__file__), "frontend")

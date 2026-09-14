@@ -16,6 +16,13 @@ class Dependency(BaseModel):
     target_path: str = Field(..., description="Relative path of target imported file or package name")
     import_statement: str = Field(..., description="Raw import string")
     is_internal: bool = Field(True, description="True if dependency points to an internal repository file")
+    resolved_path: Optional[str] = Field(None, description="Resolved relative file path within repo if internal")
+    import_type: str = Field("unknown", description="Type of import: relative, package, header, framework")
+
+class CycleDetail(BaseModel):
+    cycle_id: str = Field(..., description="Unique cycle identifier")
+    path: List[str] = Field(..., description="Ordered list of relative file paths forming the cycle")
+    cycle_length: int = Field(..., description="Number of hops in cycle")
 
 class GraphNode(BaseModel):
     id: str = Field(..., description="Unique node identifier")
@@ -29,6 +36,7 @@ class GraphNode(BaseModel):
     activity_score: float = Field(0.0, description="Git activity score")
     symbols_count: int = Field(0, description="Extracted symbol count")
     node_type: str = Field("internal", description="node_type: internal or external_package")
+    module_category: str = Field("standard", description="Category: core, leaf, utility, entry_point, isolated, standard")
 
 class GraphEdge(BaseModel):
     from_id: str = Field(..., description="Source node ID")
@@ -49,10 +57,19 @@ class FileInfo(BaseModel):
     in_degree: int = Field(0, description="Number of files importing this file")
     out_degree: int = Field(0, description="Number of imports declared by this file")
     is_circular: bool = Field(False, description="True if part of circular dependency loop")
+    module_category: str = Field("standard", description="Category: core, leaf, utility, entry_point, isolated, standard")
     symbols: List[Symbol] = Field(default_factory=list, description="List of extracted functions, classes, and methods")
     dependencies: List[Dependency] = Field(default_factory=list, description="List of imported dependencies")
     is_entry_point: bool = Field(False, description="Flag indicating whether file is a likely application entry point")
     entry_point_confidence: float = Field(0.0, description="Confidence score (0.0-1.0) for entry point detection")
+
+class ArchitectureSummary(BaseModel):
+    architecture_type: str = Field("Modular", description="Architecture pattern detected: Layered, MVC, Monolithic, Modular API, microservice, etc.")
+    entry_points_summary: List[str] = Field(default_factory=list, description="Primary application entry points")
+    core_modules: List[str] = Field(default_factory=list, description="Highly connected core modules (high in-degree)")
+    leaf_utility_modules: List[str] = Field(default_factory=list, description="Leaf / utility modules (low out-degree, reused)")
+    circular_dependencies_count: int = Field(0, description="Number of detected circular dependency cycles")
+    overview_narrative: str = Field("", description="Detailed summary narrative of repository architecture")
 
 class RepositoryIndex(BaseModel):
     repo_name: str = Field(..., description="Repository folder or GitHub repo name")
@@ -61,6 +78,9 @@ class RepositoryIndex(BaseModel):
     total_lines: int = Field(0, description="Total line count across all source files")
     languages_breakdown: Dict[str, int] = Field(default_factory=dict, description="File counts grouped by language")
     entry_points: List[str] = Field(default_factory=list, description="List of detected entry point relative paths")
+    circular_cycles: List[CycleDetail] = Field(default_factory=list, description="Detailed circular dependency chains")
+    module_counts: Dict[str, int] = Field(default_factory=dict, description="Counts by module category (core, leaf, utility, entry_point, isolated, standard)")
+    architecture_summary: Optional[ArchitectureSummary] = Field(None, description="Generated architectural overview of codebase")
     files: List[FileInfo] = Field(default_factory=list, description="List of FileInfo objects for all files")
     dependency_graph: Dict[str, Any] = Field(default_factory=dict, description="Nodes and edges payload for visual graph")
     indexed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="ISO timestamp of indexing execution")

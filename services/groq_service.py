@@ -136,4 +136,27 @@ class GroqService:
         user_prompt = f"Repository Context:\n{repo_context[:4000]}\n\nDeveloper Question: {question}"
         return self._call_groq_api(system_prompt, user_prompt, temperature=0.3)
 
+    def generate_architecture_insight(self, repo_name: str, total_files: int, total_lines: int, entry_points: list, core_modules: list, leaf_modules: list, circular_count: int, languages: dict) -> str:
+        """Generates LLM-backed executive architectural summary based on dependency graph analysis."""
+        system_prompt = (
+            "You are a Principal Software Architect analyzing dependency graphs and codebase structures. "
+            "Provide a concise, executive architectural overview in markdown with:\n"
+            "1. 🏛️ **Architecture Pattern & System Design**\n"
+            "2. 🚀 **Primary Entry Points & Flow**\n"
+            "3. 🧩 **Core Foundation & Utility Hubs**\n"
+            "4. ⚠️ **Graph Health & Dependency Risk Assessment**"
+        )
+        
+        user_prompt = (
+            f"Repository: {repo_name}\n"
+            f"Total Files: {total_files} ({total_lines} lines)\n"
+            f"Languages: {json.dumps(languages)}\n"
+            f"Entry Points: {json.dumps(entry_points)}\n"
+            f"Core Hub Modules (high in-degree): {json.dumps(core_modules)}\n"
+            f"Leaf / Utility Modules: {json.dumps(leaf_modules)}\n"
+            f"Circular Dependency Loops: {circular_count}\n"
+        )
+        
+        return self._call_groq_api(system_prompt, user_prompt, temperature=0.2)
+
 groq_service = GroqService()
