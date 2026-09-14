@@ -10,7 +10,8 @@ import uvicorn
 from config import settings
 from services.groq_service import groq_service
 from services.repo_service import repo_service
-from models.repository_index import RepositoryIndex
+from services.retrieval_service import retrieval_engine
+from models.repository_index import RepositoryIndex, RetrievedContextPayload
 
 app = FastAPI(
     title="OnBoarding Buddy API",
@@ -44,6 +45,12 @@ class GenerateGuideRequest(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     session_id: str = "default"
+
+class RetrieveRequest(BaseModel):
+    query: str
+    session_id: str = "default"
+    max_files: int = 8
+    expand_dependencies: bool = True
 
 # --- API Endpoints ---
 @app.get("/api/health")
@@ -129,14 +136,32 @@ async def generate_guide(req: GenerateGuideRequest):
         "guide": guide_markdown
     }
 
+@app.post("/api/retrieve", response_model=RetrievedContextPayload)
+async def retrieve_context(req: RetrieveRequest):
+    session = ACTIVE_SESSIONS.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+    
+    context_payload = retrieval_engine.process_query(
+        repo_index=session,
+        query=req.query,
+        max_files=req.max_files,
+        expand_dependencies=req.expand_dependencies
+    )
+    return context_payload
+
 @app.post("/api/chat")
 async def repo_chat(req: ChatRequest):
     session = ACTIVE_SESSIONS.get(req.session_id)
     repo_context = "No repo loaded yet."
     if session:
-        top_files = [f.relative_path for f in sorted(session.files, key=lambda f: f.activity_score, reverse=True)[:15]]
-        entry_pts = session.entry_points
-        repo_context = f"Repo: {session.repo_name}\nEntry Points: {', '.join(entry_pts)}\nKey Files: {', '.join(top_files)}"
+        context_payload = retrieval_engine.process_query(
+            repo_index=session,
+            query=req.question,
+            max_files=6,
+            expand_dependencies=True
+        )
+        repo_context = context_payload.formatted_context
     
     answer = groq_service.chat_with_repository(req.question, repo_context)
     return {"answer": answer}

@@ -84,3 +84,38 @@ class RepositoryIndex(BaseModel):
     files: List[FileInfo] = Field(default_factory=list, description="List of FileInfo objects for all files")
     dependency_graph: Dict[str, Any] = Field(default_factory=dict, description="Nodes and edges payload for visual graph")
     indexed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="ISO timestamp of indexing execution")
+
+# --- M3 Context Retrieval Models ---
+
+class QueryAnalysis(BaseModel):
+    original_query: str = Field(..., description="Original user natural language query")
+    normalized_terms: List[str] = Field(default_factory=list, description="Normalized tokens extracted from query")
+    expanded_concepts: List[str] = Field(default_factory=list, description="Domain synonym & concept expansions")
+
+class RetrievalMatch(BaseModel):
+    signal_type: str = Field(..., description="Type of signal: filename_exact, filename_token, symbol_exact, symbol_token, docstring, dependency, content, entry_point, centrality, git_activity")
+    score: float = Field(..., description="Score points added by this signal")
+    matched_term: str = Field("", description="Matched query term or concept")
+    details: str = Field("", description="Explainable description of match")
+
+class ScoredFile(BaseModel):
+    relative_path: str = Field(..., description="Relative file path in repository")
+    file_name: str = Field(..., description="File name")
+    language: str = Field(..., description="Language group")
+    module_category: str = Field("standard", description="Module category")
+    total_score: float = Field(0.0, description="Total relevance score")
+    matched_terms: List[str] = Field(default_factory=list, description="Unique matched query terms/concepts")
+    signals: List[str] = Field(default_factory=list, description="List of signal types triggered")
+    match_explanations: List[RetrievalMatch] = Field(default_factory=list, description="Detailed signal breakdown for explainability")
+    is_expanded_dependency: bool = Field(False, description="True if included via dependency graph expansion")
+    expansion_reason: Optional[str] = Field(None, description="Reason for inclusion via expansion")
+    matched_symbols: List[str] = Field(default_factory=list, description="Names of matched symbols")
+
+class RetrievedContextPayload(BaseModel):
+    repo_name: str = Field(..., description="Repository name")
+    query: str = Field(..., description="Original developer question")
+    query_analysis: QueryAnalysis = Field(..., description="Query analysis tokenization breakdown")
+    scored_files: List[ScoredFile] = Field(default_factory=list, description="Ranked list of relevant scored files")
+    formatted_context: str = Field("", description="LLM-ready structured Markdown context string")
+    total_files_retrieved: int = Field(0, description="Number of files included in context")
+    estimated_tokens: int = Field(0, description="Estimated token count of formatted context")
