@@ -119,3 +119,23 @@ class RetrievedContextPayload(BaseModel):
     formatted_context: str = Field("", description="LLM-ready structured Markdown context string")
     total_files_retrieved: int = Field(0, description="Number of files included in context")
     estimated_tokens: int = Field(0, description="Estimated token count of formatted context")
+
+# --- M4 Grounded AI Onboarding Assistant Models ---
+
+class SourceAttribution(BaseModel):
+    file_path: str = Field(..., description="Relative file path")
+    symbol_name: Optional[str] = Field(None, description="Matched symbol or function name if applicable")
+    line_number: Optional[int] = Field(None, description="1-indexed line number if available")
+    relevance_reason: str = Field("", description="Why this source file/symbol was cited")
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., description="Message role: user or assistant")
+    content: str = Field(..., description="Raw text message content")
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="ISO timestamp")
+
+class ChatResponse(BaseModel):
+    answer: str = Field(..., description="Grounded AI response narrative")
+    sources: List[SourceAttribution] = Field(default_factory=list, description="Structured source attributions")
+    relevant_files: List[str] = Field(default_factory=list, description="List of relevant relative file paths")
+    dependency_paths: List[str] = Field(default_factory=list, description="Related dependency paths included in context")
+    retrieval_metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata: confidence, has_sufficient_context, files_count, tokens")

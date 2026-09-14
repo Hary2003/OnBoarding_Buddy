@@ -11,7 +11,8 @@ from config import settings
 from services.groq_service import groq_service
 from services.repo_service import repo_service
 from services.retrieval_service import retrieval_engine
-from models.repository_index import RepositoryIndex, RetrievedContextPayload
+from services.conversation_service import conversation_service
+from models.repository_index import RepositoryIndex, RetrievedContextPayload, ChatResponse
 
 app = FastAPI(
     title="OnBoarding Buddy API",
@@ -150,21 +151,20 @@ async def retrieve_context(req: RetrieveRequest):
     )
     return context_payload
 
-@app.post("/api/chat")
+@app.post("/api/chat", response_model=ChatResponse)
 async def repo_chat(req: ChatRequest):
     session = ACTIVE_SESSIONS.get(req.session_id)
-    repo_context = "No repo loaded yet."
-    if session:
-        context_payload = retrieval_engine.process_query(
-            repo_index=session,
-            query=req.question,
-            max_files=6,
-            expand_dependencies=True
-        )
-        repo_context = context_payload.formatted_context
-    
-    answer = groq_service.chat_with_repository(req.question, repo_context)
-    return {"answer": answer}
+    chat_response = conversation_service.process_chat(
+        question=req.question,
+        session_id=req.session_id,
+        repo_index=session
+    )
+    return chat_response
+
+@app.delete("/api/chat/history")
+async def clear_chat_history(session_id: str = Query("default")):
+    cleared = conversation_service.clear_history(session_id)
+    return {"session_id": session_id, "cleared": cleared}
 
 @app.get("/api/dependencies")
 @app.get("/api/graph")

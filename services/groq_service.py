@@ -1,5 +1,6 @@
 import json
 import requests
+from typing import List, Dict, Optional
 from config import settings
 
 try:
@@ -17,32 +18,38 @@ MODEL_ALIAS_MAP = {
     "qwen-2.5-coder-32b": "qwen/qwen3.6-27b"
 }
 
+GROUNDED_SYSTEM_PROMPT = (
+    "You are OnBoarding Buddy, an authoritative AI software architecture & repository assistant.\n"
+    "Your core objective is to answer developer questions GROUNDED STRICTLY in the provided repository context.\n\n"
+    "CRITICAL GROUNDING RULES:\n"
+    "1. USE SUPPLIED CONTEXT ONLY: Rely strictly on the provided source code, symbols, dependencies, and file metadata.\n"
+    "2. NO HALLUCINATIONS: Never invent or assume non-existent files, functions, classes, or architecture choices that are not present in the supplied context.\n"
+    "3. DISTINGUISH FACTS FROM INFERENCE: State clear empirical facts from code. Label any logical inference as an inference.\n"
+    "4. INSUFFICIENT CONTEXT: If the supplied context does NOT contain enough evidence to answer a question (such as speculative questions like 'Why was Redis chosen?'), EXPLICITLY state that the context is insufficient (e.g. 'I couldn't determine the reason from the repository context available. I found usage in X, but there isn't enough documentation or code evidence to establish why X was chosen.').\n"
+    "5. CONCRETE CITATIONS: Prefer concrete code references (e.g. `services/repo_service.py` or `RepoService.extract_dependencies()`)."
+)
+
 class GroqService:
     GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-    def _call_groq_api(self, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
-        """Call Groq API via official Groq SDK or REST fallback with auto-retry on valid models."""
+    def _call_groq_api_messages(self, messages: List[Dict[str, str]], temperature: float = 0.2) -> str:
+        """Call Groq API with a list of messages (system prompt, conversation history, user turn)."""
         if not settings.is_groq_configured:
             return "⚠️ **Groq API Key missing.** Please set `GROQ_API_KEY` in your `.env` file to enable AI insights."
 
         configured_model = (settings.GROQ_MODEL or "groq/compound").strip()
-        # Automatically map legacy model names if specified
         target_model = MODEL_ALIAS_MAP.get(configured_model, configured_model)
-
         models_to_try = [target_model] + [m for m in VALID_FALLBACK_MODELS if m != target_model]
 
         last_error = ""
 
         for model_name in models_to_try:
-            # 1. Try official Groq SDK first
+            # 1. Try official Groq SDK
             if GROQ_SDK_AVAILABLE:
                 try:
                     client = Groq(api_key=settings.GROQ_API_KEY)
                     chat_completion = client.chat.completions.create(
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
+                        messages=messages,
                         model=model_name,
                         temperature=temperature,
                         max_tokens=2048
@@ -61,10 +68,7 @@ class GroqService:
             }
             payload = {
                 "model": model_name,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                "messages": messages,
                 "temperature": temperature,
                 "max_tokens": 2048
             }
@@ -81,6 +85,13 @@ class GroqService:
                 last_error = str(e)
 
         return f"❌ **Groq API Error**: Could not complete request. Details: {last_error}"
+
+    def _call_groq_api(self, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        return self._call_groq_api_messages(messages, temperature=temperature)
 
     def summarize_code(self, file_path: str, code_content: str) -> dict:
         """Summarizes a code file using Groq LLM."""
@@ -125,16 +136,19 @@ class GroqService:
         
         return self._call_groq_api(system_prompt, user_prompt, temperature=0.3)
 
-    def chat_with_repository(self, question: str, repo_context: str) -> str:
-        """Answers developer questions about the repository using Groq."""
-        system_prompt = (
-            "You are an AI Onboarding Buddy assisting a developer with understanding this repository. "
-            "Answer the user's question accurately using the provided repository context. "
-            "If the answer isn't fully in context, provide your best software engineering guidance while stating what is known."
-        )
+    def chat_with_repository(self, question: str, repo_context: str, history: Optional[List[Dict[str, str]]] = None) -> str:
+        """Answers developer questions about the repository using grounded system prompt and history."""
+        messages = [{"role": "system", "content": GROUNDED_SYSTEM_PROMPT}]
         
-        user_prompt = f"Repository Context:\n{repo_context[:4000]}\n\nDeveloper Question: {question}"
-        return self._call_groq_api(system_prompt, user_prompt, temperature=0.3)
+        # Append limited history (last 6 turns) if provided
+        if history:
+            for turn in history[-6:]:
+                messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+
+        user_turn_content = f"Supplied Repository Context:\n{repo_context}\n\nDeveloper Question: {question}"
+        messages.append({"role": "user", "content": user_turn_content})
+
+        return self._call_groq_api_messages(messages, temperature=0.2)
 
     def generate_architecture_insight(self, repo_name: str, total_files: int, total_lines: int, entry_points: list, core_modules: list, leaf_modules: list, circular_count: int, languages: dict) -> str:
         """Generates LLM-backed executive architectural summary based on dependency graph analysis."""

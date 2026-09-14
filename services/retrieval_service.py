@@ -13,7 +13,8 @@ STOP_WORDS = {
     "have", "has", "had", "do", "does", "did", "doing", "can", "could", "would",
     "should", "how", "what", "where", "when", "why", "which", "who", "whom",
     "this", "that", "these", "those", "it", "its", "handled", "work", "works",
-    "show", "find", "get", "get_file", "code", "file", "files", "project", "repo"
+    "show", "find", "get", "get_file", "code", "file", "files", "project", "repo",
+    "company", "use", "uses", "used", "using", "choose", "chose", "chosen", "decide", "decided"
 }
 
 # Domain-specific software engineering concept mapping
