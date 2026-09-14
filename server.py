@@ -12,7 +12,8 @@ from services.groq_service import groq_service
 from services.repo_service import repo_service
 from services.retrieval_service import retrieval_engine
 from services.conversation_service import conversation_service
-from models.repository_index import RepositoryIndex, RetrievedContextPayload, ChatResponse
+from services.contribution_service import contribution_service
+from models.repository_index import RepositoryIndex, RetrievedContextPayload, ChatResponse, ContributionPlan
 
 app = FastAPI(
     title="OnBoarding Buddy API",
@@ -52,6 +53,13 @@ class RetrieveRequest(BaseModel):
     session_id: str = "default"
     max_files: int = 8
     expand_dependencies: bool = True
+
+class IssueRequest(BaseModel):
+    title: str
+    description: str = ""
+    session_id: str = "default"
+    max_files: int = 10
+    max_impact_depth: int = 2
 
 # --- API Endpoints ---
 @app.get("/api/health")
@@ -165,6 +173,22 @@ async def repo_chat(req: ChatRequest):
 async def clear_chat_history(session_id: str = Query("default")):
     cleared = conversation_service.clear_history(session_id)
     return {"session_id": session_id, "cleared": cleared}
+
+@app.post("/api/contribution/analyze", response_model=ContributionPlan)
+async def analyze_contribution(req: IssueRequest):
+    session = ACTIVE_SESSIONS.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+    
+    plan = contribution_service.generate_plan(
+        title=req.title,
+        description=req.description,
+        session_id=req.session_id,
+        repo_index=session,
+        max_files=req.max_files,
+        max_impact_depth=req.max_impact_depth
+    )
+    return plan
 
 @app.get("/api/dependencies")
 @app.get("/api/graph")

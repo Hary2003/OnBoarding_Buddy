@@ -139,3 +139,53 @@ class ChatResponse(BaseModel):
     relevant_files: List[str] = Field(default_factory=list, description="List of relevant relative file paths")
     dependency_paths: List[str] = Field(default_factory=list, description="Related dependency paths included in context")
     retrieval_metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata: confidence, has_sufficient_context, files_count, tokens")
+
+# --- M5 Issue-to-Code Contribution Intelligence Models ---
+
+class IssueAnalysis(BaseModel):
+    title: str = Field(..., description="Issue or feature request title")
+    summary: str = Field(..., description="Concise issue requirement summary")
+    keywords: List[str] = Field(default_factory=list, description="Extracted technical keywords")
+    technologies: List[str] = Field(default_factory=list, description="Detected technology stack terms")
+    actions: List[str] = Field(default_factory=list, description="Action verbs (e.g. add, configure, update, fix)")
+    domains: List[str] = Field(default_factory=list, description="Functional domain areas (e.g. database, api, auth, config)")
+
+class ContributionCandidate(BaseModel):
+    file_path: str = Field(..., description="Relative file path")
+    file_name: str = Field(..., description="Filename")
+    base_retrieval_score: float = Field(0.0, description="Base score from M3 retrieval engine")
+    contribution_score: float = Field(0.0, description="Final explainable contribution score")
+    module_category: str = Field("standard", description="Module category (core, leaf, utility, entry_point)")
+    matched_symbols: List[str] = Field(default_factory=list, description="Matched function/class symbols")
+    scoring_explanations: List[str] = Field(default_factory=list, description="Explainable scoring rules triggered")
+
+class ImpactAnalysis(BaseModel):
+    directly_affected: List[str] = Field(default_factory=list, description="Files directly requiring modification")
+    downstream_impact: List[str] = Field(default_factory=list, description="Files dependent on directly affected modules")
+    upstream_context: List[str] = Field(default_factory=list, description="Files called/used by directly affected modules")
+    dependency_chains: List[str] = Field(default_factory=list, description="Formatted dependency impact chains (A -> B -> C)")
+
+class TestImpact(BaseModel):
+    directly_related_tests: List[str] = Field(default_factory=list, description="Direct matching test files")
+    potentially_related_tests: List[str] = Field(default_factory=list, description="Indirect or module-related test files")
+    evidence: List[str] = Field(default_factory=list, description="Evidence connecting source modules to test files")
+
+class ConfigImpact(BaseModel):
+    configuration_files: List[str] = Field(default_factory=list, description="Detected project configuration files")
+    evidence: List[str] = Field(default_factory=list, description="Evidence connecting issue requirements to configs")
+
+class ContributionPlan(BaseModel):
+    repo_name: str = Field(..., description="Repository name")
+    issue_analysis: IssueAnalysis = Field(..., description="Structured issue requirement analysis")
+    relevant_files: List[ContributionCandidate] = Field(default_factory=list, description="Ranked candidate files")
+    relevant_symbols: List[str] = Field(default_factory=list, description="Key symbols implicated in issue")
+    directly_affected_files: List[str] = Field(default_factory=list, description="Files requiring modification")
+    impacted_files: List[str] = Field(default_factory=list, description="Potentially impacted downstream files")
+    configuration_files: List[str] = Field(default_factory=list, description="Implicated configuration files")
+    test_files: List[str] = Field(default_factory=list, description="Associated test files for verification")
+    dependency_paths: List[str] = Field(default_factory=list, description="Formatted dependency impact chains")
+    recommended_changes: List[str] = Field(default_factory=list, description="Step-by-step implementation recommendations")
+    risks: List[str] = Field(default_factory=list, description="Implementation risks and considerations")
+    confidence: str = Field("Medium", description="Deterministic confidence level: High, Medium, or Low")
+    evidence: List[str] = Field(default_factory=list, description="Repository evidence supporting the plan")
+    plan_narrative: str = Field("", description="Complete grounded Markdown contribution analysis report")
