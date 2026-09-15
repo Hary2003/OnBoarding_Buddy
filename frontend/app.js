@@ -46,6 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const issueDesc = document.getElementById("issue-desc");
     const analyzeContribBtn = document.getElementById("analyze-contrib-btn");
     const contributionContent = document.getElementById("contribution-content");
+    const auditRepoBtn = document.getElementById("audit-repo-btn");
+    const auditOpportunitiesContainer = document.getElementById("audit-opportunities-container");
 
     // Check Backend Health & Groq Status on Startup
     async function checkHealth() {
@@ -580,5 +582,107 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (contribForm) {
         contribForm.addEventListener("submit", runContributionAnalysis);
+    }
+
+    // Open-Source Audit & Opportunity Scanner Handler
+    if (auditRepoBtn) {
+        auditRepoBtn.addEventListener("click", async () => {
+            auditRepoBtn.disabled = true;
+            auditRepoBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Auditing AST & Security...`;
+            if (auditOpportunitiesContainer) {
+                auditOpportunitiesContainer.style.display = "block";
+                auditOpportunitiesContainer.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Scanning repository AST for security risks, refactoring debt & test coverage gaps...</h3></div>`;
+            }
+
+            try {
+                if (!currentSession) {
+                    const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
+                    const cloneRes = await fetch("/api/clone", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
+                    });
+                    if (cloneRes.ok) {
+                        currentSession = await cloneRes.json();
+                    }
+                }
+
+                const res = await fetch("/api/contribution/audit", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: "default" })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "Audit scanning failed.");
+                }
+
+                const auditData = await res.json();
+                renderAuditReport(auditData);
+
+            } catch (err) {
+                if (auditOpportunitiesContainer) {
+                    auditOpportunitiesContainer.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">❌ ${err.message}</p></div>`;
+                }
+            } finally {
+                auditRepoBtn.disabled = false;
+                auditRepoBtn.innerHTML = `<i class="fa-solid fa-shield-halved"></i> 🔍 Audit Repo & Find Opportunities`;
+            }
+        });
+    }
+
+    function renderAuditReport(auditReport) {
+        if (!auditOpportunitiesContainer) return;
+        if (!auditReport.opportunities || auditReport.opportunities.length === 0) {
+            auditOpportunitiesContainer.innerHTML = `<div class="empty-state"><h3>✅ Excellent Repository Health!</h3><p>No critical security vulnerabilities, test gaps, or circular dependency risks detected.</p></div>`;
+            return;
+        }
+
+        let html = `<div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 16px; margin-bottom: 16px;">`;
+        html += `<h3 style="margin-top:0; font-size: 16px; display: flex; align-items: center; gap: 8px;">🔍 Open Source Contribution Opportunities Audit Report for <code>${auditReport.repo_name}</code></h3>`;
+        html += `<p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Identified <strong>${auditReport.total_opportunities} actionable contribution opportunities</strong> across 🔴 Critical (${auditReport.critical_count}), 🟠 High (${auditReport.high_count}), 🟡 Medium (${auditReport.medium_count}), 🔵 Low (${auditReport.low_count}). Click any opportunity card to auto-generate a full PR implementation plan.</p>`;
+        html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">`;
+
+        auditReport.opportunities.forEach((opp) => {
+            let badgeColor = "#64748b";
+            if (opp.severity === "Critical") badgeColor = "#f43f5e";
+            else if (opp.severity === "High") badgeColor = "#f97316";
+            else if (opp.severity === "Medium") badgeColor = "#eab308";
+            else if (opp.severity === "Low") badgeColor = "#3b82f6";
+
+            const fileBadges = opp.target_files.map(f => `<span class="badge" style="font-size:10px;">${f}</span>`).join(" ");
+
+            html += `
+                <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span class="badge" style="background: ${badgeColor}; color: white; font-weight: 600; font-size: 11px;">${opp.severity.toUpperCase()}</span>
+                            <span style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">${opp.category.replace('_', ' ')}</span>
+                        </div>
+                        <h4 style="margin: 4px 0 6px 0; font-size: 14px; line-height: 1.3;">${opp.title}</h4>
+                        <p style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.4;">${opp.description}</p>
+                        <div style="margin-bottom: 10px;">${fileBadges}</div>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm select-opp-btn" data-title="${encodeURIComponent(opp.suggested_issue_title)}" data-desc="${encodeURIComponent(opp.suggested_issue_desc)}" style="width: 100%; justify-content: center; font-size: 12px;">
+                        ⚡ Analyze & Generate PR Plan
+                    </button>
+                </div>
+            `;
+        });
+
+        html += `</div></div>`;
+        auditOpportunitiesContainer.innerHTML = html;
+
+        auditOpportunitiesContainer.querySelectorAll(".select-opp-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                const title = decodeURIComponent(btn.dataset.title || "");
+                const desc = decodeURIComponent(btn.dataset.desc || "");
+                if (issueTitle) issueTitle.value = title;
+                if (issueDesc) issueDesc.value = desc;
+                runContributionAnalysis(e);
+            });
+        });
     }
 });

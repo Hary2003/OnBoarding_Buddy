@@ -189,3 +189,27 @@ class ContributionPlan(BaseModel):
     confidence: str = Field("Medium", description="Deterministic confidence level: High, Medium, or Low")
     evidence: List[str] = Field(default_factory=list, description="Repository evidence supporting the plan")
     plan_narrative: str = Field("", description="Complete grounded Markdown contribution analysis report")
+
+# --- Audit & Open-Source Contribution Scanner Models ---
+
+class ContributionOpportunity(BaseModel):
+    opportunity_id: str = Field(..., description="Unique opportunity identifier")
+    title: str = Field(..., description="Short title describing the open source contribution opportunity")
+    category: str = Field(..., description="Category: security, test_coverage, architecture_refactor, documentation")
+    severity: str = Field("Medium", description="Severity or Impact level: Critical, High, Medium, Low")
+    target_files: List[str] = Field(default_factory=list, description="Target repository file paths implicated")
+    description: str = Field("", description="Detailed explanation of vulnerability, risk, or debt found")
+    remediation_plan: str = Field("", description="Recommended open source contribution fix or pull request plan")
+    suggested_issue_title: str = Field("", description="Pre-formulated issue title for one-click analysis")
+    suggested_issue_desc: str = Field("", description="Pre-formulated issue description for one-click analysis")
+
+class AuditReport(BaseModel):
+    repo_name: str = Field(..., description="Repository name")
+    total_opportunities: int = Field(0, description="Total number of detected contribution opportunities")
+    critical_count: int = Field(0, description="Critical severity opportunities")
+    high_count: int = Field(0, description="High severity opportunities")
+    medium_count: int = Field(0, description="Medium severity opportunities")
+    low_count: int = Field(0, description="Low severity opportunities")
+    opportunities: List[ContributionOpportunity] = Field(default_factory=list, description="Ranked contribution opportunities")
+    summary_narrative: str = Field("", description="Markdown summary of repository health and contribution potential")
+

@@ -13,7 +13,8 @@ from services.repo_service import repo_service
 from services.retrieval_service import retrieval_engine
 from services.conversation_service import conversation_service
 from services.contribution_service import contribution_service
-from models.repository_index import RepositoryIndex, RetrievedContextPayload, ChatResponse, ContributionPlan
+from services.audit_service import audit_service
+from models.repository_index import RepositoryIndex, RetrievedContextPayload, ChatResponse, ContributionPlan, AuditReport, ContributionOpportunity
 
 app = FastAPI(
     title="OnBoarding Buddy API",
@@ -60,6 +61,9 @@ class IssueRequest(BaseModel):
     session_id: str = "default"
     max_files: int = 10
     max_impact_depth: int = 2
+
+class AuditRequest(BaseModel):
+    session_id: str = "default"
 
 # --- API Endpoints ---
 @app.get("/api/health")
@@ -189,6 +193,15 @@ async def analyze_contribution(req: IssueRequest):
         max_impact_depth=req.max_impact_depth
     )
     return plan
+
+@app.post("/api/contribution/audit", response_model=AuditReport)
+async def audit_repository_opportunities(req: AuditRequest):
+    session = ACTIVE_SESSIONS.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+    
+    report = audit_service.run_audit(session)
+    return report
 
 @app.get("/api/dependencies")
 @app.get("/api/graph")
