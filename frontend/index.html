@@ -31,7 +31,7 @@
             </div>
 
             <!-- Repo URL Input Form -->
-            <form id="repo-form" class="repo-input-container">
+            <form id="repo-form" class="repo-input-container" action="javascript:void(0);" onsubmit="event.preventDefault();">
                 <div class="input-wrapper">
                     <i class="fa-brands fa-github input-icon"></i>
                     <input type="text" id="repo-input" placeholder="Enter GitHub URL or local folder path..." value="https://github.com/psf/requests" required>
@@ -239,7 +239,7 @@
                                 </div>
                             </div>
                         </div>
-                        <form id="chat-form" class="chat-input-bar">
+                        <form id="chat-form" class="chat-input-bar" action="javascript:void(0);" onsubmit="event.preventDefault();">
                             <input type="text" id="chat-input" placeholder="Ask a question about this repository..." required>
                             <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> Send</button>
                         </form>
@@ -256,7 +256,7 @@
                             </div>
                         </div>
                         <hr class="divider">
-                        <form id="contribution-form" style="margin-bottom: 20px;">
+                        <form id="contribution-form" style="margin-bottom: 20px;" action="javascript:void(0);" onsubmit="event.preventDefault();">
                             <div style="margin-bottom: 12px;">
                                 <label style="display:block; font-weight:600; margin-bottom:4px;">Issue Title:</label>
                                 <input type="text" id="issue-title" class="select-input" style="width:100%; padding:10px;" placeholder="e.g. Add support for PostgreSQL connection pooling" required>

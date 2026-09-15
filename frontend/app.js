@@ -41,6 +41,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const chatInput = document.getElementById("chat-input");
     const chatMessages = document.getElementById("chat-messages");
 
+    const contribForm = document.getElementById("contribution-form");
+    const issueTitle = document.getElementById("issue-title");
+    const issueDesc = document.getElementById("issue-desc");
+    const analyzeContribBtn = document.getElementById("analyze-contrib-btn");
+    const contributionContent = document.getElementById("contribution-content");
+
     // Check Backend Health & Groq Status on Startup
     async function checkHealth() {
         try {
@@ -477,59 +483,24 @@ document.addEventListener("DOMContentLoaded", () => {
         return msgDiv;
     }
 
-    // Preset Issue Buttons Handler
-    document.querySelectorAll(".preset-issue-btn").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-            e.preventDefault();
-            if (issueTitle) issueTitle.value = btn.dataset.title || "";
-            if (issueDesc) issueDesc.value = btn.dataset.desc || "";
-            if (contribForm) {
-                contribForm.dispatchEvent(new Event("submit", { cancelable: true }));
-            }
-        });
-    });
+    // Contribution Intelligence Runner & Preset Handlers
+    async function runContributionAnalysis(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        const title = issueTitle ? issueTitle.value.trim() : "";
+        const desc = issueDesc ? issueDesc.value.trim() : "";
+        if (!title) return false;
 
-    // Contribution Intelligence Form Handler
-    const contribForm = document.getElementById("contribution-form");
-    const issueTitle = document.getElementById("issue-title");
-    const issueDesc = document.getElementById("issue-desc");
-    const analyzeContribBtn = document.getElementById("analyze-contrib-btn");
-    const contributionContent = document.getElementById("contribution-content");
+        if (analyzeContribBtn) {
+            analyzeContribBtn.disabled = true;
+            analyzeContribBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing Issue & Impact...`;
+        }
+        if (contributionContent) {
+            contributionContent.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Mapping issue requirements to repository files and graph impact...</h3></div>`;
+        }
 
-    if (contribForm) {
-        contribForm.addEventListener("submit", async (e) => {
-            if (e && e.preventDefault) e.preventDefault();
-            const title = issueTitle ? issueTitle.value.trim() : "";
-            const desc = issueDesc ? issueDesc.value.trim() : "";
-            if (!title) return;
-
-            if (analyzeContribBtn) {
-                analyzeContribBtn.disabled = true;
-                analyzeContribBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing Issue & Impact...`;
-            }
-            if (contributionContent) {
-                contributionContent.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Mapping issue requirements to repository files and graph impact...</h3></div>`;
-            }
-
-            try {
-                // If session is missing, auto-index target repository first
-                if (!currentSession) {
-                    const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
-                    const cloneRes = await fetch("/api/clone", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
-                    });
-                    if (!cloneRes.ok) {
-                        const err = await cloneRes.json();
-                        throw new Error(err.detail || "Repository indexing failed.");
-                    }
-                    currentSession = await cloneRes.json();
-                    if (fileCount) fileCount.textContent = `${currentSession.total_files} files (${currentSession.total_lines} lines)`;
-                    if (typeof renderFilesIndex === "function") renderFilesIndex(currentSession.files);
-                }
-
-                const res = await fetch("/api/contribution/analyze", {
+        try {
+            async function callAnalyzeApi() {
+                return await fetch("/api/contribution/analyze", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -538,30 +509,76 @@ document.addEventListener("DOMContentLoaded", () => {
                         session_id: "default"
                     })
                 });
+            }
 
-                if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err.detail || "Contribution analysis failed.");
+            if (!currentSession) {
+                const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
+                const cloneRes = await fetch("/api/clone", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
+                });
+                if (!cloneRes.ok) {
+                    const err = await cloneRes.json();
+                    throw new Error(err.detail || "Repository indexing failed.");
                 }
-                const data = await res.json();
+                currentSession = await cloneRes.json();
+                if (fileCount) fileCount.textContent = `${currentSession.total_files} files (${currentSession.total_lines} lines)`;
+                if (typeof renderFilesIndex === "function") renderFilesIndex(currentSession.files);
+            }
 
-                if (contributionContent) {
-                    contributionContent.innerHTML = marked.parse(data.plan_narrative);
-                }
-                if (analyzeContribBtn) {
-                    analyzeContribBtn.disabled = false;
-                    analyzeContribBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution`;
-                }
+            let res = await callAnalyzeApi();
 
-            } catch (err) {
-                if (contributionContent) {
-                    contributionContent.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">❌ ${err.message}</p></div>`;
-                }
-                if (analyzeContribBtn) {
-                    analyzeContribBtn.disabled = false;
-                    analyzeContribBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution`;
+            if (res.status === 404) {
+                const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
+                const cloneRes = await fetch("/api/clone", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
+                });
+                if (cloneRes.ok) {
+                    currentSession = await cloneRes.json();
+                    if (fileCount) fileCount.textContent = `${currentSession.total_files} files (${currentSession.total_lines} lines)`;
+                    if (typeof renderFilesIndex === "function") renderFilesIndex(currentSession.files);
+                    res = await callAnalyzeApi();
                 }
             }
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || "Contribution analysis failed.");
+            }
+
+            const data = await res.json();
+
+            if (contributionContent) {
+                const formattedHtml = typeof marked !== "undefined" && marked.parse ? marked.parse(data.plan_narrative) : data.plan_narrative;
+                contributionContent.innerHTML = formattedHtml;
+            }
+        } catch (err) {
+            if (contributionContent) {
+                contributionContent.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">❌ ${err.message}</p></div>`;
+            }
+        } finally {
+            if (analyzeContribBtn) {
+                analyzeContribBtn.disabled = false;
+                analyzeContribBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution`;
+            }
+        }
+        return false;
+    }
+
+    // Preset Issue Buttons Handler
+    document.querySelectorAll(".preset-issue-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (issueTitle) issueTitle.value = btn.dataset.title || "";
+            if (issueDesc) issueDesc.value = btn.dataset.desc || "";
+            runContributionAnalysis(e);
         });
+    });
+
+    if (contribForm) {
+        contribForm.addEventListener("submit", runContributionAnalysis);
     }
 });
