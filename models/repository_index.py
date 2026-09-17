@@ -213,3 +213,56 @@ class AuditReport(BaseModel):
     opportunities: List[ContributionOpportunity] = Field(default_factory=list, description="Ranked contribution opportunities")
     summary_narrative: str = Field("", description="Markdown summary of repository health and contribution potential")
 
+# --- M6 Agentic Repository Exploration Models ---
+
+class ToolCall(BaseModel):
+    call_id: str = Field(..., description="Unique tool call identifier")
+    tool_name: str = Field(..., description="Registered read-only repository tool name")
+    arguments: Dict[str, Any] = Field(default_factory=dict, description="Validated tool arguments")
+
+class ToolResult(BaseModel):
+    call_id: str = Field(..., description="Matching tool call identifier")
+    tool_name: str = Field(..., description="Executed tool name")
+    success: bool = Field(..., description="True when tool execution succeeded")
+    data: Dict[str, Any] = Field(default_factory=dict, description="Structured tool result payload")
+    error: Optional[str] = Field(None, description="Error message when execution failed")
+
+class AgentTraceEvent(BaseModel):
+    step: int = Field(..., description="1-indexed public investigation step number")
+    tool: Optional[str] = Field(None, description="Tool used for this event, if applicable")
+    status: str = Field(..., description="Trace status: planned, running, success, error, skipped, complete")
+    description: str = Field(..., description="Short user-visible action or observation summary")
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="ISO timestamp")
+
+class AgentFinding(BaseModel):
+    finding: str = Field(..., description="Concise grounded finding collected during exploration")
+    source: Optional[SourceAttribution] = Field(None, description="Repository source supporting the finding")
+
+class AgentState(BaseModel):
+    user_query: str = Field(..., description="Developer question being investigated")
+    conversation_history: List[Dict[str, str]] = Field(default_factory=list, description="Relevant prior chat turns")
+    investigation_plan: List[str] = Field(default_factory=list, description="Current high-level investigation plan")
+    current_step: Optional[str] = Field(None, description="Current public plan step")
+    tool_calls: List[ToolCall] = Field(default_factory=list, description="Executed tool calls")
+    observations: List[ToolResult] = Field(default_factory=list, description="Tool observations")
+    discovered_files: List[str] = Field(default_factory=list, description="Repository files discovered or inspected")
+    discovered_symbols: List[str] = Field(default_factory=list, description="Symbols discovered or inspected")
+    dependency_paths: List[str] = Field(default_factory=list, description="Dependency paths established during exploration")
+    findings: List[AgentFinding] = Field(default_factory=list, description="Grounded findings with sources")
+    sources: List[SourceAttribution] = Field(default_factory=list, description="Source attributions collected")
+    trace: List[AgentTraceEvent] = Field(default_factory=list, description="Observable investigation trace")
+    iteration: int = Field(0, description="Current loop iteration count")
+    token_usage: Dict[str, Any] = Field(default_factory=dict, description="LLM or context token usage metadata")
+    final_answer: Optional[str] = Field(None, description="Final grounded answer")
+
+class AgentExploreResponse(BaseModel):
+    answer: str = Field(..., description="Grounded final answer")
+    sources: List[SourceAttribution] = Field(default_factory=list, description="Source attributions")
+    findings: List[AgentFinding] = Field(default_factory=list, description="Grounded investigation findings")
+    files_inspected: List[str] = Field(default_factory=list, description="Files inspected or discovered")
+    symbols_inspected: List[str] = Field(default_factory=list, description="Symbols inspected or discovered")
+    dependency_paths: List[str] = Field(default_factory=list, description="Dependency paths found")
+    tools_used: List[str] = Field(default_factory=list, description="Tool names executed during exploration")
+    trace: List[AgentTraceEvent] = Field(default_factory=list, description="Public agent trace")
+    iterations: int = Field(0, description="Loop iterations completed")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Agent limits and execution metadata")

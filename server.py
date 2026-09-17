@@ -14,7 +14,8 @@ from services.retrieval_service import retrieval_engine
 from services.conversation_service import conversation_service
 from services.contribution_service import contribution_service
 from services.audit_service import audit_service
-from models.repository_index import RepositoryIndex, RetrievedContextPayload, ChatResponse, ContributionPlan, AuditReport, ContributionOpportunity
+from services.agent.agent import agent_service
+from models.repository_index import RepositoryIndex, RetrievedContextPayload, ChatResponse, ContributionPlan, AuditReport, ContributionOpportunity, AgentExploreResponse
 
 app = FastAPI(
     title="OnBoarding Buddy API",
@@ -64,6 +65,13 @@ class IssueRequest(BaseModel):
 
 class AuditRequest(BaseModel):
     session_id: str = "default"
+
+class AgentExploreRequest(BaseModel):
+    query: str
+    session_id: str = "default"
+    max_iterations: int = 8
+    max_tool_calls: int = 15
+    max_files: int = 20
 
 # --- API Endpoints ---
 @app.get("/api/health")
@@ -172,6 +180,24 @@ async def repo_chat(req: ChatRequest):
         repo_index=session
     )
     return chat_response
+
+@app.post("/api/agent/explore", response_model=AgentExploreResponse)
+async def agent_explore(req: AgentExploreRequest):
+    session = ACTIVE_SESSIONS.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+
+    try:
+        return agent_service.explore(
+            query=req.query,
+            repo_index=session,
+            conversation_history=conversation_service.get_history(req.session_id),
+            max_iterations=req.max_iterations,
+            max_tool_calls=req.max_tool_calls,
+            max_files=req.max_files
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 @app.delete("/api/chat/history")
 async def clear_chat_history(session_id: str = Query("default")):
