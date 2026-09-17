@@ -62,6 +62,9 @@
                 <button class="tab-btn" data-tab="chat-tab">
                     <i class="fa-solid fa-comments"></i> AI Assistant
                 </button>
+                <button class="tab-btn" data-tab="agent-tab">
+                    <i class="fa-solid fa-route"></i> Agent Explorer
+                </button>
                 <button class="tab-btn" data-tab="contribution-tab">
                     <i class="fa-solid fa-bullseye"></i> Contribution Intelligence
                 </button>
@@ -246,7 +249,48 @@
                     </div>
                 </section>
 
-                <!-- TAB 5: ISSUE CONTRIBUTION INTELLIGENCE -->
+                <!-- TAB 5: AGENTIC REPOSITORY EXPLORER -->
+                <section id="agent-tab" class="tab-pane">
+                    <div class="agent-container glass-panel">
+                        <div class="agent-query-panel">
+                            <div>
+                                <h2><i class="fa-solid fa-route"></i> Agent Explorer</h2>
+                                <p class="text-muted">Ask a complex repository question and watch the read-only investigation trace.</p>
+                            </div>
+                            <form id="agent-form" class="agent-form" action="javascript:void(0);" onsubmit="event.preventDefault();">
+                                <input type="text" id="agent-input" placeholder="How does an API request flow through this repository?" required>
+                                <button type="submit" id="agent-explore-btn" class="btn btn-primary">
+                                    <i class="fa-solid fa-magnifying-glass-location"></i> Explore Repository
+                                </button>
+                            </form>
+                        </div>
+                        <div class="agent-results-grid">
+                            <aside class="agent-trace-panel">
+                                <h3><i class="fa-solid fa-list-check"></i> Agent Investigation</h3>
+                                <div id="agent-trace" class="agent-trace">
+                                    <div class="empty-state">
+                                        <i class="fa-solid fa-route"></i>
+                                        <p>Run an exploration to see tool activity and observations.</p>
+                                    </div>
+                                </div>
+                            </aside>
+                            <section class="agent-answer-panel markdown-body">
+                                <div id="agent-answer" class="agent-answer">
+                                    <div class="empty-state large">
+                                        <i class="fa-solid fa-compass"></i>
+                                        <h3>No Agent Exploration Yet</h3>
+                                        <p>Ask a question above to collect repository evidence before generating an answer.</p>
+                                    </div>
+                                </div>
+                                <div id="agent-files" class="agent-detail-section"></div>
+                                <div id="agent-sources" class="agent-detail-section"></div>
+                                <div id="agent-summary" class="agent-detail-section"></div>
+                            </section>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 6: ISSUE CONTRIBUTION INTELLIGENCE -->
                 <section id="contribution-tab" class="tab-pane">
                     <div class="guide-container glass-panel">
                         <div class="guide-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">

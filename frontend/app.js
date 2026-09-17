@@ -49,6 +49,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const auditRepoBtn = document.getElementById("audit-repo-btn");
     const auditOpportunitiesContainer = document.getElementById("audit-opportunities-container");
 
+    const agentForm = document.getElementById("agent-form");
+    const agentInput = document.getElementById("agent-input");
+    const agentExploreBtn = document.getElementById("agent-explore-btn");
+    const agentTrace = document.getElementById("agent-trace");
+    const agentAnswer = document.getElementById("agent-answer");
+    const agentFiles = document.getElementById("agent-files");
+    const agentSources = document.getElementById("agent-sources");
+    const agentSummary = document.getElementById("agent-summary");
+
     // Check Backend Health & Groq Status on Startup
     async function checkHealth() {
         try {
@@ -483,6 +492,137 @@ document.addEventListener("DOMContentLoaded", () => {
         chatMessages.appendChild(msgDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
         return msgDiv;
+    }
+
+    // Agentic Repository Explorer
+    if (agentForm) {
+        agentForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const query = agentInput ? agentInput.value.trim() : "";
+            if (!query) return;
+
+            if (agentExploreBtn) {
+                agentExploreBtn.disabled = true;
+                agentExploreBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Exploring...`;
+            }
+            if (agentTrace) {
+                agentTrace.innerHTML = `<div class="trace-item running"><i class="fa-solid fa-spinner fa-spin"></i><span>Starting read-only repository investigation...</span></div>`;
+            }
+            if (agentAnswer) {
+                agentAnswer.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Collecting repository evidence...</h3></div>`;
+            }
+            if (agentFiles) agentFiles.innerHTML = "";
+            if (agentSources) agentSources.innerHTML = "";
+            if (agentSummary) agentSummary.innerHTML = "";
+
+            try {
+                if (!currentSession) {
+                    const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
+                    const cloneRes = await fetch("/api/clone", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
+                    });
+                    if (!cloneRes.ok) {
+                        const err = await cloneRes.json();
+                        throw new Error(err.detail || "Repository indexing failed.");
+                    }
+                    currentSession = await cloneRes.json();
+                    if (fileCount) fileCount.textContent = `${currentSession.total_files} files (${currentSession.total_lines} lines)`;
+                    renderFilesIndex(currentSession.files);
+                }
+
+                const res = await fetch("/api/agent/explore", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        query: query,
+                        session_id: "default",
+                        max_iterations: 8,
+                        max_tool_calls: 15,
+                        max_files: 20
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "Agent exploration failed.");
+                }
+
+                const data = await res.json();
+                renderAgentResult(data);
+            } catch (err) {
+                if (agentTrace) {
+                    agentTrace.innerHTML = `<div class="trace-item error"><i class="fa-solid fa-triangle-exclamation"></i><span>${escapeHtml(err.message)}</span></div>`;
+                }
+                if (agentAnswer) {
+                    agentAnswer.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">Error: ${escapeHtml(err.message)}</p></div>`;
+                }
+            } finally {
+                if (agentExploreBtn) {
+                    agentExploreBtn.disabled = false;
+                    agentExploreBtn.innerHTML = `<i class="fa-solid fa-magnifying-glass-location"></i> Explore Repository`;
+                }
+            }
+        });
+    }
+
+    function renderAgentResult(data) {
+        if (agentTrace) {
+            agentTrace.innerHTML = (data.trace || []).map(event => {
+                const icon = event.status === "success" || event.status === "complete" ? "fa-check" :
+                    event.status === "error" ? "fa-triangle-exclamation" :
+                    event.status === "running" ? "fa-spinner fa-spin" : "fa-circle";
+                return `
+                    <div class="trace-item ${event.status}">
+                        <i class="fa-solid ${icon}"></i>
+                        <span>${escapeHtml(event.description)}</span>
+                        ${event.tool ? `<code>${escapeHtml(event.tool)}</code>` : ""}
+                    </div>
+                `;
+            }).join("");
+        }
+
+        if (agentAnswer) {
+            agentAnswer.innerHTML = `<h3>Answer</h3>${marked.parse(data.answer || "No answer generated.")}`;
+        }
+
+        if (agentFiles) {
+            agentFiles.innerHTML = `
+                <h3>Relevant Files</h3>
+                <div class="agent-chip-list">${(data.files_inspected || []).map(path => `<span class="badge">${escapeHtml(path)}</span>`).join("") || `<span class="text-muted">No files inspected.</span>`}</div>
+            `;
+        }
+
+        if (agentSources) {
+            agentSources.innerHTML = `
+                <h3>Sources</h3>
+                <div class="agent-source-list">
+                    ${(data.sources || []).map(src => {
+                        const symbol = src.symbol_name ? `::${src.symbol_name}` : "";
+                        const line = src.line_number ? `:${src.line_number}` : "";
+                        return `<div class="agent-source"><code>${escapeHtml(src.file_path + symbol + line)}</code><span>${escapeHtml(src.relevance_reason || "")}</span></div>`;
+                    }).join("") || `<span class="text-muted">No source attributions collected.</span>`}
+                </div>
+            `;
+        }
+
+        if (agentSummary) {
+            const meta = data.metadata || {};
+            agentSummary.innerHTML = `
+                <h3>Investigation Summary</h3>
+                <p class="text-muted">Iterations: ${data.iterations || 0} | Tool calls: ${meta.tool_calls || 0} | Tools: ${(data.tools_used || []).join(", ") || "none"}</p>
+            `;
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     // Contribution Intelligence Runner & Preset Handlers
