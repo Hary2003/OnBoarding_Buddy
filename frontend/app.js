@@ -825,4 +825,365 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         });
     }
+
+    // --- M7 Pull Request Intelligence Logic ---
+    const prForm = document.getElementById("pr-form");
+    const prTitleInput = document.getElementById("pr-title-input");
+    const prFileInput = document.getElementById("pr-file-input");
+    const prDiffInput = document.getElementById("pr-diff-input");
+    const prAnalyzeBtn = document.getElementById("pr-analyze-btn");
+    const prReviewBtn = document.getElementById("pr-review-btn");
+    const prResultsContainer = document.getElementById("pr-results-container");
+    const prEmptyState = document.getElementById("pr-empty-state");
+    const prMetricsBar = document.getElementById("pr-metrics-bar");
+    const prSummaries = document.getElementById("pr-summaries");
+
+    const SAMPLE_FEATURE_DIFF = `diff --git a/services/auth_service.py b/services/auth_service.py
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/services/auth_service.py
+@@ -0,0 +1,24 @@
++import jwt
++from datetime import datetime, timezone, timedelta
++
++class AuthService:
++    def __init__(self, secret: str = "configured_secret"):
++        self.secret = secret
++
++    def create_access_token(self, user_id: str) -> str:
++        payload = {
++            "sub": user_id,
++            "exp": datetime.now(timezone.utc) + timedelta(hours=1)
++        }
++        return jwt.encode(payload, self.secret, algorithm="HS256")
++
++    def verify_token(self, token: str) -> dict:
++        try:
++            return jwt.decode(token, self.secret, algorithms=["HS256"])
++        except Exception as e:
++            return {"valid": False, "error": str(e)}
++`;
+
+    const SAMPLE_VULN_DIFF = `diff --git a/services/report_service.py b/services/report_service.py
+--- a/services/report_service.py
++++ b/services/report_service.py
+@@ -10,6 +10,14 @@ def generate_report(query_param: str):
+     # Added dangerous dynamic evaluation and shell execution
++    api_key = "AIzaSyD-TESTING-SECRET-KEY-12345678"
++    eval(query_param)
++    import subprocess
++    subprocess.Popen("cat /etc/passwd", shell=True)
++    import requests
++    requests.get(user_url, verify=False)
++    return {"status": "generated"}
+`;
+
+    const SAMPLE_ARCH_DIFF = `diff --git a/models/user_model.py b/models/user_model.py
+--- a/models/user_model.py
++++ b/models/user_model.py
+@@ -3,6 +3,9 @@ from pydantic import BaseModel
++# Architectural layer violation: Model importing high-level API server
++from server import app, ACTIVE_SESSIONS
++
+ class UserModel(BaseModel):
+     user_id: str
+     username: str
+`;
+
+    const loadFeatureBtn = document.getElementById("pr-load-feature-btn");
+    const loadVulnBtn = document.getElementById("pr-load-vuln-btn");
+    const loadArchBtn = document.getElementById("pr-load-arch-btn");
+
+    if (loadFeatureBtn) {
+        loadFeatureBtn.addEventListener("click", () => {
+            if (prTitleInput) prTitleInput.value = "feat(auth): implement AuthService token generation and validation";
+            if (prDiffInput) prDiffInput.value = SAMPLE_FEATURE_DIFF;
+        });
+    }
+
+    if (loadVulnBtn) {
+        loadVulnBtn.addEventListener("click", () => {
+            if (prTitleInput) prTitleInput.value = "fix(report): dynamic report query handling";
+            if (prDiffInput) prDiffInput.value = SAMPLE_VULN_DIFF;
+        });
+    }
+
+    if (loadArchBtn) {
+        loadArchBtn.addEventListener("click", () => {
+            if (prTitleInput) prTitleInput.value = "refactor(models): import server app inside user model";
+            if (prDiffInput) prDiffInput.value = SAMPLE_ARCH_DIFF;
+        });
+    }
+
+    if (prFileInput) {
+        prFileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                if (prDiffInput) prDiffInput.value = event.target.result;
+            };
+            reader.readAsText(file);
+        });
+    }
+
+    document.querySelectorAll(".pr-subtab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".pr-subtab-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            const targetId = btn.dataset.subtab;
+            document.querySelectorAll(".pr-subpanel").forEach(p => {
+                if (p.id === targetId) {
+                    p.style.display = "block";
+                    p.classList.add("active");
+                } else {
+                    p.style.display = "none";
+                    p.classList.remove("active");
+                }
+            });
+        });
+    });
+
+    async function runPRAnalysis(runReview = false) {
+        const diffText = (prDiffInput ? prDiffInput.value : "").trim();
+        if (!diffText) {
+            alert("Please paste a git diff patch or upload a .diff file first.");
+            return;
+        }
+
+        const endpoint = runReview ? "/api/pr/review" : "/api/pr/analyze";
+        const title = prTitleInput ? prTitleInput.value.trim() : "";
+        const originalText = runReview ? (prReviewBtn ? prReviewBtn.innerHTML : "") : (prAnalyzeBtn ? prAnalyzeBtn.innerHTML : "");
+
+        if (runReview && prReviewBtn) {
+            prReviewBtn.disabled = true;
+            prReviewBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Reviewing...';
+        } else if (prAnalyzeBtn) {
+            prAnalyzeBtn.disabled = true;
+            prAnalyzeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analyzing...';
+        }
+
+        try {
+            const res = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ diff: diffText, title: title, session_id: "default" })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || "Failed to analyze PR diff.");
+            }
+
+            const data = await res.json();
+            renderPRResults(data, runReview);
+        } catch (err) {
+            alert(`PR Analysis Error: ${err.message}`);
+        } finally {
+            if (runReview && prReviewBtn) {
+                prReviewBtn.disabled = false;
+                prReviewBtn.innerHTML = originalText;
+            } else if (prAnalyzeBtn) {
+                prAnalyzeBtn.disabled = false;
+                prAnalyzeBtn.innerHTML = originalText;
+            }
+        }
+    }
+
+    if (prForm) {
+        prForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            runPRAnalysis(false);
+        });
+    }
+
+    if (prReviewBtn) {
+        prReviewBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            runPRAnalysis(true);
+        });
+    }
+
+    function renderPRResults(data, isReview = false) {
+        if (prEmptyState) prEmptyState.style.display = "none";
+        if (prResultsContainer) prResultsContainer.style.display = "block";
+
+        const summary = data.summary || {};
+        const verdict = isReview ? data.verdict : (summary.risk_level === "Critical" || summary.risk_level === "High" ? "REQUEST_CHANGES" : (summary.risk_level === "Medium" ? "COMMENT" : "APPROVE"));
+        const risks = data.risks || [];
+        const fileChanges = data.file_changes || [];
+        const archImpact = data.architecture_impact || {};
+        const testRec = data.test_recommendations || {};
+        const comments = data.review_comments || [];
+
+        let verdictColor = verdict === "APPROVE" ? "#10b981" : (verdict === "REQUEST_CHANGES" ? "#ef4444" : "#f59e0b");
+        let riskColor = summary.risk_level === "Critical" ? "#ef4444" : (summary.risk_level === "High" ? "#f97316" : (summary.risk_level === "Medium" ? "#f59e0b" : "#10b981"));
+
+        if (prMetricsBar) {
+            prMetricsBar.innerHTML = `
+                <div class="pr-metric-card">
+                    <span class="label">Verdict</span>
+                    <span class="value" style="color: ${verdictColor}; font-size: 15px;"><i class="fa-solid fa-stamp"></i> ${verdict}</span>
+                </div>
+                <div class="pr-metric-card">
+                    <span class="label">Change Type</span>
+                    <span class="value" style="text-transform: capitalize; font-size: 15px; color: var(--accent-cyan);">${(summary.change_type || "feature").replace('_', ' ')}</span>
+                </div>
+                <div class="pr-metric-card">
+                    <span class="label">Risk Level</span>
+                    <span class="value" style="color: ${riskColor}; font-size: 15px;">${summary.risk_level || "Low"}</span>
+                </div>
+                <div class="pr-metric-card">
+                    <span class="label">Files Changed</span>
+                    <span class="value">${summary.files_changed || fileChanges.length || 0}</span>
+                </div>
+                <div class="pr-metric-card">
+                    <span class="label">Additions</span>
+                    <span class="value" style="color: #10b981;">+${summary.lines_added || 0}</span>
+                </div>
+                <div class="pr-metric-card">
+                    <span class="label">Deletions</span>
+                    <span class="value" style="color: #ef4444;">-${summary.lines_removed || 0}</span>
+                </div>
+            `;
+        }
+
+        if (prSummaries) {
+            prSummaries.innerHTML = `
+                <div class="pr-summary-card">
+                    <h4><i class="fa-solid fa-briefcase"></i> Executive Summary</h4>
+                    <p>${summary.executive_summary || "No executive summary generated."}</p>
+                </div>
+                <div class="pr-summary-card">
+                    <h4><i class="fa-solid fa-code"></i> Developer Summary</h4>
+                    <div style="font-size: 12px; line-height: 1.5; color: var(--text-secondary); white-space: pre-line;">${summary.developer_summary || "No technical summary generated."}</div>
+                </div>
+            `;
+        }
+
+        const subFiles = document.getElementById("pr-sub-files");
+        if (subFiles) {
+            if (!fileChanges.length) {
+                subFiles.innerHTML = `<p class="text-muted" style="padding: 10px;">No parsed file changes available.</p>`;
+            } else {
+                subFiles.innerHTML = fileChanges.map(fc => `
+                    <div class="pr-file-card">
+                        <div class="pr-file-header">
+                            <div>
+                                <span class="badge" style="margin-right: 6px; font-size: 10px; text-transform: uppercase;">${fc.status}</span>
+                                <span class="pr-file-path">${fc.file_path}</span>
+                            </div>
+                            <div class="pr-diff-stat">
+                                <span class="add">+${fc.additions}</span> / <span class="del">-${fc.deletions}</span>
+                            </div>
+                        </div>
+                        ${fc.modified_symbols && fc.modified_symbols.length ? `
+                            <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">
+                                <strong>Symbols:</strong> ${fc.modified_symbols.map(s => `<code style="background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 3px; color: #a5b4fc;">${s}</code>`).join(' ')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('');
+            }
+        }
+
+        const subArch = document.getElementById("pr-sub-arch");
+        if (subArch) {
+            subArch.innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+                    <div class="glass-panel" style="padding: 14px;">
+                        <h4 style="margin-top:0; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-layer-group"></i> Layers Touched</h4>
+                        <p style="font-size: 12px; color: var(--text-secondary);">${archImpact.architectural_layers && archImpact.architectural_layers.length ? archImpact.architectural_layers.join(', ') : 'Standard'}</p>
+                        <h4 style="margin-top: 10px; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-door-open"></i> Impacted Entry Points</h4>
+                        <p style="font-size: 12px; color: var(--text-secondary);">${archImpact.affected_entry_points && archImpact.affected_entry_points.length ? archImpact.affected_entry_points.map(e => `<code>${e}</code>`).join(', ') : 'None'}</p>
+                    </div>
+                    <div class="glass-panel" style="padding: 14px;">
+                        <h4 style="margin-top:0; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-arrow-up-right-dots"></i> Coupling Impact Score</h4>
+                        <p style="font-size: 18px; font-weight: 700; color: #a5b4fc; margin: 4px 0;">${archImpact.coupling_increase_score || 0} / 10.0</p>
+                        <h4 style="margin-top: 10px; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-arrows-split-up-and-left"></i> Upstream Blast Radius</h4>
+                        <p style="font-size: 12px; color: var(--text-secondary);">${archImpact.upstream_impact && archImpact.upstream_impact.length ? `${archImpact.upstream_impact.length} dependent file(s)` : 'Isolated component'}</p>
+                    </div>
+                </div>
+                ${archImpact.layer_violations && archImpact.layer_violations.length ? `
+                    <div class="pr-risk-item" style="border-left: 4px solid #ef4444;">
+                        <h4 style="margin:0 0 6px 0; color: #ef4444; font-size: 13px;"><i class="fa-solid fa-triangle-exclamation"></i> Architectural Layer Violations Detected</h4>
+                        ${archImpact.layer_violations.map(v => `<p style="font-size: 12px; margin: 4px 0; color: #fca5a5;">${v}</p>`).join('')}
+                    </div>
+                ` : '<div class="glass-panel" style="padding: 12px; color: #10b981; font-size: 12.5px;"><i class="fa-solid fa-circle-check"></i> No architectural layer violations detected.</div>'}
+            `;
+        }
+
+        const subTests = document.getElementById("pr-sub-tests");
+        if (subTests) {
+            subTests.innerHTML = `
+                ${testRec.missing_tests && testRec.missing_tests.length ? `
+                    <div class="pr-risk-item Medium" style="margin-bottom: 14px;">
+                        <h4 style="margin:0 0 6px 0; color: #f59e0b; font-size: 13px;"><i class="fa-solid fa-circle-exclamation"></i> Missing Test Warnings</h4>
+                        ${testRec.missing_tests.map(m => `<p style="font-size: 12px; margin: 4px 0; color: #fde68a;">${m}</p>`).join('')}
+                    </div>
+                ` : ''}
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div class="glass-panel" style="padding: 14px;">
+                        <h4 style="margin-top:0; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-vial-circle-check"></i> Recommended Tests to Run</h4>
+                        ${testRec.recommended_test_files && testRec.recommended_test_files.length ? `
+                            <ul style="padding-left: 18px; margin: 4px 0; font-size: 12px; color: var(--text-secondary);">
+                                ${testRec.recommended_test_files.map(t => `<li><code>${t}</code></li>`).join('')}
+                            </ul>
+                        ` : '<p style="font-size: 12px; color: var(--text-muted);">No specific test files identified.</p>'}
+                    </div>
+                    <div class="glass-panel" style="padding: 14px;">
+                        <h4 style="margin-top:0; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-list-check"></i> Recommended Scenarios & Edge Cases</h4>
+                        ${testRec.recommended_scenarios && testRec.recommended_scenarios.length ? `
+                            <ul style="padding-left: 18px; margin: 4px 0; font-size: 12px; color: var(--text-secondary);">
+                                ${testRec.recommended_scenarios.slice(0, 4).map(s => `<li>${s}</li>`).join('')}
+                                ${testRec.recommended_edge_cases ? testRec.recommended_edge_cases.slice(0, 3).map(e => `<li style="color: #cbd5e1;"><em>Edge case:</em> ${e}</li>`).join('') : ''}
+                            </ul>
+                        ` : '<p style="font-size: 12px; color: var(--text-muted);">No custom test scenarios needed.</p>'}
+                    </div>
+                </div>
+            `;
+        }
+
+        const subSecurity = document.getElementById("pr-sub-security");
+        if (subSecurity) {
+            if (!risks.length) {
+                subSecurity.innerHTML = `<div class="glass-panel" style="padding: 14px; color: #10b981; font-size: 13px;"><i class="fa-solid fa-shield-check"></i> Static security review passed: 0 vulnerabilities found in PR diff.</div>`;
+            } else {
+                subSecurity.innerHTML = risks.map(r => `
+                    <div class="pr-risk-item ${r.severity}">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <strong style="color: ${r.severity === 'Critical' ? '#ef4444' : (r.severity === 'High' ? '#f97316' : '#f59e0b')}; font-size: 13.5px;"><i class="fa-solid fa-bug"></i> ${r.title}</strong>
+                            <span class="badge" style="background: ${r.severity === 'Critical' ? '#ef4444' : '#f59e0b'}; color: white; font-size: 10px;">${r.severity.toUpperCase()}</span>
+                        </div>
+                        <p style="font-size: 12px; margin: 2px 0 6px 0; color: var(--text-secondary);">File: <code>${r.file_path}${r.line_number ? `:${r.line_number}` : ''}</code></p>
+                        ${r.evidence ? `<pre style="background: rgba(0,0,0,0.4); padding: 8px; border-radius: 4px; font-size: 11.5px; color: #fca5a5; overflow-x: auto;">${r.evidence}</pre>` : ''}
+                        <p style="font-size: 12px; margin-top: 6px; color: #6ee7b7;"><strong>Remediation:</strong> ${r.remediation}</p>
+                    </div>
+                `).join('');
+            }
+        }
+
+        const subComments = document.getElementById("pr-sub-comments");
+        if (subComments) {
+            if (!comments.length) {
+                subComments.innerHTML = `<div class="glass-panel" style="padding: 14px; color: #10b981; font-size: 13px;"><i class="fa-solid fa-thumbs-up"></i> No actionable review comments generated. Code looks ready to merge.</div>`;
+            } else {
+                subComments.innerHTML = comments.map(c => `
+                    <div class="pr-comment-card ${c.severity || 'warning'}">
+                        <div class="pr-comment-header">
+                            <span class="pr-comment-title"><i class="fa-solid fa-comment-dots"></i> ${c.title}</span>
+                            <div>
+                                <span class="badge" style="font-size: 10px; margin-right: 6px; text-transform: uppercase;">${c.severity}</span>
+                                <code>${c.file_path}${c.line_number ? `:${c.line_number}` : ''}</code>
+                            </div>
+                        </div>
+                        <p style="font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); margin: 6px 0;">${c.body}</p>
+                        ${c.evidence ? `<div class="pr-comment-evidence">${c.evidence}</div>` : ''}
+                        ${c.recommendation ? `<div class="pr-comment-recommendation"><strong>Recommendation:</strong> ${c.recommendation}</div>` : ''}
+                    </div>
+                `).join('');
+            }
+        }
+    }
 });

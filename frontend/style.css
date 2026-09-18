@@ -887,3 +887,178 @@ body {
         flex-direction: column;
     }
 }
+
+/* --- M7 Pull Request Intelligence & Code Review Styles --- */
+
+.pr-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+}
+
+.pr-metric-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pr-metric-card .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+
+.pr-metric-card .value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.pr-summary-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 900px) {
+    .pr-summary-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+.pr-summary-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.pr-summary-card h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--accent-cyan);
+}
+
+.pr-summary-card p {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.pr-subtab-btn.active {
+    background: var(--accent-indigo);
+    color: #fff;
+    border-color: var(--accent-indigo);
+}
+
+.pr-file-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+}
+
+.pr-file-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pr-file-path {
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pr-diff-stat {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.pr-diff-stat .add { color: #10b981; }
+.pr-diff-stat .del { color: #ef4444; }
+
+.pr-comment-card {
+    background: rgba(15, 23, 42, 0.6);
+    border-left: 4px solid var(--accent-cyan);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0 6px 6px 0;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+
+.pr-comment-card.critical { border-left-color: #ef4444; }
+.pr-comment-card.warning { border-left-color: #f59e0b; }
+.pr-comment-card.suggestion { border-left-color: #3b82f6; }
+.pr-comment-card.nitpick { border-left-color: #8b5cf6; }
+
+.pr-comment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pr-comment-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.pr-comment-evidence {
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    margin: 8px 0;
+    color: #cbd5e1;
+    overflow-x: auto;
+}
+
+.pr-comment-recommendation {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    color: #6ee7b7;
+    margin-top: 6px;
+}
+
+.pr-risk-item {
+    background: rgba(239, 68, 68, 0.06);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+}
+
+.pr-risk-item.Medium {
+    background: rgba(245, 158, 11, 0.06);
+    border-color: rgba(245, 158, 11, 0.2);
+}
+
+.pr-risk-item.Low {
+    background: rgba(59, 130, 246, 0.06);
+    border-color: rgba(59, 130, 246, 0.2);
+}
+

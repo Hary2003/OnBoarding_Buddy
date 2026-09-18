@@ -15,7 +15,12 @@ from services.conversation_service import conversation_service
 from services.contribution_service import contribution_service
 from services.audit_service import audit_service
 from services.agent.agent import agent_service
-from models.repository_index import RepositoryIndex, RetrievedContextPayload, ChatResponse, ContributionPlan, AuditReport, ContributionOpportunity, AgentExploreResponse
+from services.pr_service import pr_service
+from models.repository_index import (
+    RepositoryIndex, RetrievedContextPayload, ChatResponse,
+    ContributionPlan, AuditReport, ContributionOpportunity,
+    AgentExploreResponse, PullRequestAnalysis, PRReviewResponse, PRSummary
+)
 
 app = FastAPI(
     title="OnBoarding Buddy API",
@@ -72,6 +77,24 @@ class AgentExploreRequest(BaseModel):
     max_iterations: int = 8
     max_tool_calls: int = 15
     max_files: int = 20
+
+class PRAnalyzeRequest(BaseModel):
+    diff: str
+    session_id: str = "default"
+    title: str = ""
+    description: str = ""
+
+class PRReviewRequest(BaseModel):
+    diff: str
+    session_id: str = "default"
+    title: str = ""
+    description: str = ""
+
+class PRSummaryRequest(BaseModel):
+    diff: str
+    session_id: str = "default"
+    title: str = ""
+    description: str = ""
 
 # --- API Endpoints ---
 @app.get("/api/health")
@@ -195,6 +218,56 @@ async def agent_explore(req: AgentExploreRequest):
             max_iterations=req.max_iterations,
             max_tool_calls=req.max_tool_calls,
             max_files=req.max_files
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+# --- M7 Pull Request Intelligence Endpoints ---
+
+@app.post("/api/pr/analyze", response_model=PullRequestAnalysis)
+async def analyze_pr(req: PRAnalyzeRequest):
+    session = ACTIVE_SESSIONS.get(req.session_id)
+    diff_text = req.diff.strip() if req.diff else ""
+    if not diff_text:
+        raise HTTPException(status_code=400, detail="Pull request diff is required.")
+    try:
+        return pr_service.analyze_pr(
+            diff_text=diff_text,
+            repo_index=session,
+            title=req.title,
+            description=req.description
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+@app.post("/api/pr/review", response_model=PRReviewResponse)
+async def review_pr(req: PRReviewRequest):
+    session = ACTIVE_SESSIONS.get(req.session_id)
+    diff_text = req.diff.strip() if req.diff else ""
+    if not diff_text:
+        raise HTTPException(status_code=400, detail="Pull request diff is required.")
+    try:
+        return pr_service.review_pr(
+            diff_text=diff_text,
+            repo_index=session,
+            title=req.title,
+            description=req.description
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+@app.post("/api/pr/summary", response_model=PRSummary)
+async def summarize_pr(req: PRSummaryRequest):
+    session = ACTIVE_SESSIONS.get(req.session_id)
+    diff_text = req.diff.strip() if req.diff else ""
+    if not diff_text:
+        raise HTTPException(status_code=400, detail="Pull request diff is required.")
+    try:
+        return pr_service.summarize_pr(
+            diff_text=diff_text,
+            repo_index=session,
+            title=req.title,
+            description=req.description
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

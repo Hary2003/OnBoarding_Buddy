@@ -68,6 +68,9 @@
                 <button class="tab-btn" data-tab="contribution-tab">
                     <i class="fa-solid fa-bullseye"></i> Contribution Intelligence
                 </button>
+                <button class="tab-btn" data-tab="pr-tab">
+                    <i class="fa-solid fa-code-pull-request"></i> PR Intelligence
+                </button>
             </nav>
 
             <!-- Tab Content Area -->
@@ -332,6 +335,90 @@
                                 <h3>No Issue Analyzed Yet</h3>
                                 <p>Enter an issue title & description above and click <strong>"Analyze Contribution"</strong> to map features to code changes.</p>
                             </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 7: PULL REQUEST INTELLIGENCE & CODE REVIEW -->
+                <section id="pr-tab" class="tab-pane">
+                    <div class="guide-container glass-panel">
+                        <div class="guide-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <h2><i class="fa-solid fa-code-pull-request"></i> Pull Request Intelligence & Code Review Agent</h2>
+                                <p class="text-muted">Analyze code changes, evaluate architectural blast radius, assess test impact, scan for diff-level security vulnerabilities, and generate automated code review comments.</p>
+                            </div>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button id="pr-load-feature-btn" type="button" class="btn btn-secondary btn-sm">
+                                    <i class="fa-solid fa-plus-circle"></i> Sample Feature PR
+                                </button>
+                                <button id="pr-load-vuln-btn" type="button" class="btn btn-secondary btn-sm">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> Sample Security Risk PR
+                                </button>
+                                <button id="pr-load-arch-btn" type="button" class="btn btn-secondary btn-sm">
+                                    <i class="fa-solid fa-sitemap"></i> Sample Arch Violation PR
+                                </button>
+                            </div>
+                        </div>
+                        <hr class="divider">
+
+                        <form id="pr-form" style="margin-bottom: 20px;" action="javascript:void(0);" onsubmit="event.preventDefault();">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                                <div>
+                                    <label style="display:block; font-weight:600; margin-bottom:4px;">PR Title (Optional):</label>
+                                    <input type="text" id="pr-title-input" class="select-input" style="width:100%; padding:9px;" placeholder="e.g. feat(auth): add token validation and caching">
+                                </div>
+                                <div>
+                                    <label style="display:block; font-weight:600; margin-bottom:4px;">Upload Patch File (.diff / .patch):</label>
+                                    <input type="file" id="pr-file-input" class="select-input" accept=".diff,.patch,.txt" style="width:100%; padding:6px;">
+                                </div>
+                            </div>
+
+                            <div style="margin-bottom: 14px;">
+                                <label style="display:block; font-weight:600; margin-bottom:4px;">Unified Git Diff Patch:</label>
+                                <textarea id="pr-diff-input" class="select-input" style="width:100%; height:140px; padding:10px; font-family: 'Fira Code', monospace; font-size: 13px;" placeholder="Paste git diff or unified patch here (e.g. diff --git a/services/auth.py b/services/auth.py...)"></textarea>
+                            </div>
+
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                <button type="submit" id="pr-analyze-btn" class="btn btn-primary">
+                                    <i class="fa-solid fa-magnifying-glass-chart"></i> Analyze Pull Request
+                                </button>
+                                <button type="button" id="pr-review-btn" class="btn btn-secondary">
+                                    <i class="fa-solid fa-robot"></i> Run PR Review Agent
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- PR Analysis Results Container -->
+                        <div id="pr-results-container" style="display: none;">
+                            <!-- Metrics Bar -->
+                            <div id="pr-metrics-bar" class="pr-metrics-grid" style="margin-bottom: 18px;"></div>
+
+                            <!-- Executive & Developer Summary -->
+                            <div id="pr-summaries" class="pr-summary-cards" style="margin-bottom: 20px;"></div>
+
+                            <!-- Detailed Sub-panels: Tabs -->
+                            <div class="pr-subtabs" style="margin-bottom: 15px; display: flex; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn active" data-subtab="pr-sub-files"><i class="fa-solid fa-file-code"></i> Changed Files & Symbols</button>
+                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn" data-subtab="pr-sub-arch"><i class="fa-solid fa-sitemap"></i> Architecture Impact</button>
+                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn" data-subtab="pr-sub-tests"><i class="fa-solid fa-vial"></i> Test Impact & Scenarios</button>
+                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn" data-subtab="pr-sub-security"><i class="fa-solid fa-shield-halved"></i> Security Risks</button>
+                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn" data-subtab="pr-sub-comments"><i class="fa-solid fa-comments"></i> Review Comments</button>
+                            </div>
+
+                            <!-- Subtab Content Panels -->
+                            <div id="pr-subtab-content">
+                                <div id="pr-sub-files" class="pr-subpanel active"></div>
+                                <div id="pr-sub-arch" class="pr-subpanel" style="display: none;"></div>
+                                <div id="pr-sub-tests" class="pr-subpanel" style="display: none;"></div>
+                                <div id="pr-sub-security" class="pr-subpanel" style="display: none;"></div>
+                                <div id="pr-sub-comments" class="pr-subpanel" style="display: none;"></div>
+                            </div>
+                        </div>
+
+                        <div id="pr-empty-state" class="empty-state large">
+                            <i class="fa-solid fa-code-compare"></i>
+                            <h3>No Pull Request Analyzed Yet</h3>
+                            <p>Paste a unified git diff patch above or click one of the quick sample buttons to evaluate code changes, architecture impacts, and security vulnerabilities.</p>
                         </div>
                     </div>
                 </section>
