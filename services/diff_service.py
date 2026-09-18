@@ -268,17 +268,17 @@ class ChangeClassifier:
         paths = [fc.file_path.lower() for fc in file_changes]
         text_context = f"{title} {description}".lower()
 
-        # 1. Documentation update
-        if all(any(p.endswith(ext) for ext in self.DOC_EXTENSIONS) or "doc" in p or "docs/" in p for p in paths):
-            return "documentation_update"
+        # 1. Configuration change
+        if all(os.path.basename(p) in self.CONFIG_NAMES or p.endswith(".yml") or p.endswith(".yaml") or p.endswith(".json") or p.endswith(".toml") or "config" in p for p in paths):
+            return "configuration_change"
 
         # 2. Test update
         if all("test" in p or "spec" in p for p in paths):
             return "test_update"
 
-        # 3. Configuration change
-        if all(os.path.basename(p) in self.CONFIG_NAMES or p.endswith(".yml") or p.endswith(".yaml") or p.endswith(".json") or p.endswith(".toml") or "config" in p for p in paths):
-            return "configuration_change"
+        # 3. Documentation update
+        if all(any(p.endswith(ext) for ext in self.DOC_EXTENSIONS) or "doc" in p or "docs/" in p for p in paths):
+            return "documentation_update"
 
         # 4. Bug fix indicators
         fix_keywords = {"fix", "bug", "patch", "resolve", "hotfix", "issue", "error", "crash", "flaky"}

@@ -84,8 +84,9 @@ class ArchitectureReviewer:
             # Layer violation detection in added lines
             for hunk in fc.hunks:
                 for line in hunk.lines:
-                    if line.startswith("+"):
-                        violation = self._detect_layer_violation(layer, line)
+                    if line.startswith("+") and not line.startswith("+++"):
+                        clean_line = line[1:].strip()
+                        violation = self._detect_layer_violation(layer, clean_line)
                         if violation and violation not in layer_violations:
                             layer_violations.append(f"In `{path}`: {violation}")
 
