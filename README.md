@@ -296,7 +296,7 @@ Contribution Plan
 
 Also includes static repository auditing for potential security, architecture, and test-coverage issues.
 
-## M6 — Agentic Repository Exploration 🚧
+## M6 — Agentic Repository Exploration ✅
 
 ```text
 Developer Question
@@ -312,6 +312,26 @@ Dynamic Re-planning
 Evidence Collection
         ↓
 Grounded Response
+```
+
+## M7 — Pull Request Intelligence & Code Review Agent ✅
+
+```text
+Pull Request Diff / Unified Patch
+        ↓
+Git Diff Engine (Added/Removed lines, Hunks)
+        ↓
+Symbol Extraction & Change Classification
+        ↓
+Architecture Blast Radius (Layers, Entry Points, Couplings)
+        ↓
+Test Impact Intelligence (Missing Tests, Scenarios, Edge Cases)
+        ↓
+Diff-Level Security Scanner (Secrets, Eval, Shell, SQLi, XSS, SSRF)
+        ↓
+Review Comment Generator & PR Review Agent
+        ↓
+Approval Verdict (APPROVE / REQUEST_CHANGES) & Evidence-Backed Comments
 ```
 
 ---
@@ -444,7 +464,7 @@ Run the complete test suite:
 python -m unittest discover -s tests
 ```
 
-The current implementation has **61 automated tests covering M1–M5**, with the full suite passing during M5 verification.
+The current implementation has **131 automated tests covering M1–M7** (including 36 dedicated M6 agentic exploration tests and 34 dedicated M7 PR intelligence tests), with the full suite passing.
 
 The test suite covers:
 
@@ -463,9 +483,19 @@ The test suite covers:
 * Configuration detection
 * Static repository auditing
 * Security/debt heuristics
-* FastAPI endpoints
-
-M6 adds a separate agent test suite as agentic exploration is developed.
+* Agent architecture, planning, and memory
+* Read-only repository tools (10 tools)
+* Dynamic tool selection and re-planning
+* Trace event generation and hard limits
+* Grounded answer synthesis without hallucination
+* Git diff parsing and unified hunk processing
+* Change classification (feature, bugfix, refactor, config, test, doc)
+* Architectural layer violations and god module alerts
+* Test impact intelligence and scenario recommendations
+* Diff-level security vulnerability scanning (secrets, eval, shell, injection, SSL, deserialization)
+* PR Review Agent and evidence-backed inline review comments
+* Agent PR investigation tools (`get_pr_diff`, `get_changed_files`, `get_changed_symbols`, etc.)
+* FastAPI endpoints (`/api/pr/analyze`, `/api/pr/review`, `/api/pr/summary`)
 
 ---
 
@@ -580,10 +610,10 @@ Repository analysis does not require executing arbitrary target-repository code.
 * [x] Contribution intelligence
 * [x] Static repository auditing
 * [x] Vulnerability/debt opportunity detection
-* [ ] Agentic repository exploration
+* [x] Agentic repository exploration
+* [x] Pull-request analysis & code review agent
 * [ ] Advanced semantic code retrieval
 * [ ] GitHub issue integration
-* [ ] Pull-request analysis
 * [ ] Repository change tracking
 * [ ] Cross-commit architectural analysis
 * [ ] Advanced code-change impact prediction
