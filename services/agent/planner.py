@@ -20,7 +20,16 @@ class AgentPlanner:
         query_lower = query.lower()
         plan = ["Search repository evidence related to the developer question."]
 
-        if any(term in query_lower for term in ["request", "flow", "api", "endpoint", "route", "start", "entry"]):
+        if any(term in query_lower for term in ["pr", "pull request", "diff", "patch", "code review", "changes"]):
+            plan = [
+                "Inspect PR diff and changed files.",
+                "Identify modified symbols and functions.",
+                "Review architectural layer impact and dependencies.",
+                "Scan added code for security vulnerabilities.",
+                "Evaluate test impact and missing test cases.",
+                "Synthesize grounded code review with recommendations."
+            ]
+        elif any(term in query_lower for term in ["request", "flow", "api", "endpoint", "route", "start", "entry"]):
             plan = [
                 "Find likely entry points.",
                 "Search for API, router, or flow-related modules.",
@@ -143,6 +152,12 @@ class AgentPlanner:
         last_success = next((obs for obs in reversed(state.observations) if obs.success), None)
 
         if not state.tool_calls:
+            if any(term in query_lower for term in ["pr", "pull request", "diff", "patch", "code review", "changes"]):
+                candidates.append(("get_changed_files", {}))
+                candidates.append(("summarize_changes", {}))
+                candidates.append(("review_security", {}))
+                candidates.append(("review_architecture", {}))
+                candidates.append(("review_tests", {}))
             if any(term in query_lower for term in ["architecture", "dependency", "dependencies", "graph", "circular"]):
                 candidates.append(("get_architecture", {}))
             if any(term in query_lower for term in ["request", "flow", "api", "endpoint", "route", "entry", "start"]):

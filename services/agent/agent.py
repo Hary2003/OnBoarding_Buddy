@@ -37,6 +37,7 @@ class AgentService:
         max_tool_calls: int = DEFAULT_MAX_TOOL_CALLS,
         max_files: int = DEFAULT_MAX_FILES,
         max_context_tokens: int = DEFAULT_MAX_CONTEXT_TOKENS,
+        diff_text: Optional[str] = None,
     ) -> AgentExploreResponse:
         if not repo_index or not repo_index.files:
             raise ValueError("No active repository index found. Please analyze a repository first.")
@@ -48,7 +49,7 @@ class AgentService:
         max_files = max(1, min(int(max_files or DEFAULT_MAX_FILES), 60))
         max_context_tokens = max(1000, min(int(max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS), 32000))
 
-        registry = build_repository_tool_registry(repo_index)
+        registry = build_repository_tool_registry(repo_index, diff_text=diff_text)
         executor = ToolExecutor(registry)
         state = AgentState(
             user_query=query.strip(),
@@ -231,6 +232,58 @@ class AgentService:
                 add_file(item.get("file_path"))
             if data.get("files"):
                 new_findings.append((f"Reviewed Git activity for {len(data.get('files', []))} active file(s).", None))
+
+        elif result.tool_name == "get_changed_files":
+            for f in data.get("files", []):
+                p = f.get("file_path")
+                add_file(p)
+                source = SourceAttribution(file_path=p, line_number=1, relevance_reason=f"PR {f.get('status', 'changed')} file") if p else None
+                add_source(source)
+                for sym in f.get("modified_symbols", []):
+                    add_symbol(sym)
+                new_findings.append((f"PR alters `{p}` [{f.get('status')}] with +{f.get('additions')}/-{f.get('deletions')} lines.", source))
+
+        elif result.tool_name == "get_changed_symbols":
+            for sym in data.get("symbols", []):
+                add_symbol(sym)
+                new_findings.append((f"PR modifies symbol `{sym}` in `{data.get('file_path')}`.", None))
+            for p, sym_list in data.get("symbols_by_file", {}).items():
+                add_file(p)
+                for sym in sym_list:
+                    add_symbol(sym)
+                    new_findings.append((f"PR modifies symbol `{sym}` in `{p}`.", None))
+
+        elif result.tool_name == "review_architecture":
+            impact = data.get("architecture_impact", {})
+            for ep in impact.get("affected_entry_points", []):
+                add_file(ep)
+                new_findings.append((f"PR changes impact application entry point `{ep}`.", None))
+            for violation in impact.get("layer_violations", []):
+                new_findings.append((f"Architectural layer violation: {violation}", None))
+            for god in impact.get("god_module_risks", []):
+                new_findings.append((f"Coupling/complexity alert: {god}", None))
+
+        elif result.tool_name == "review_security":
+            risks = data.get("risks", [])
+            for r in risks:
+                source = SourceAttribution(file_path=r.get("file_path"), line_number=r.get("line_number") or 1, relevance_reason=f"Security risk: {r.get('title')}")
+                add_source(source)
+                new_findings.append((f"Security Alert [{r.get('severity')}]: {r.get('title')} in `{r.get('file_path')}`.", source))
+            if not risks:
+                new_findings.append(("Static security scan passed with no vulnerabilities detected in PR diff.", None))
+
+        elif result.tool_name == "review_tests":
+            rec = data.get("test_recommendations", {})
+            for missing in rec.get("missing_tests", []):
+                new_findings.append((f"Missing test warning: {missing}", None))
+            for tf in rec.get("recommended_test_files", []):
+                add_file(tf)
+                new_findings.append((f"Recommended test file: `{tf}`", None))
+
+        elif result.tool_name == "summarize_changes":
+            sum_data = data.get("summary", {})
+            if sum_data.get("executive_summary"):
+                new_findings.append((f"Executive summary: {sum_data.get('executive_summary')}", None))
 
         existing_findings = {finding.finding for finding in state.findings}
         for text, source in new_findings:

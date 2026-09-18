@@ -256,8 +256,93 @@ class RepositoryAgentTools:
             ]
         }
 
+    # --- M7 Pull Request Intelligence Tools ---
 
-def build_repository_tool_registry(repo_index: RepositoryIndex) -> RepositoryToolRegistry:
+    def get_pr_diff(self, file_path: Optional[str] = None) -> Dict[str, Any]:
+        if not hasattr(self, "_pr_diff") or not self._pr_diff:
+            raise ValueError("No active PR diff loaded in this investigation session.")
+        if file_path and hasattr(self, "_pr_analysis") and self._pr_analysis:
+            norm = file_path.replace("\\", "/").lstrip("/")
+            fc = next((f for f in self._pr_analysis.file_changes if f.file_path == norm), None)
+            if fc:
+                return {"success": True, "tool": "get_pr_diff", "file_path": norm, "patch": fc.patch}
+        return {"success": True, "tool": "get_pr_diff", "diff": self._pr_diff}
+
+    def get_changed_files(self) -> Dict[str, Any]:
+        if not hasattr(self, "_pr_analysis") or not self._pr_analysis:
+            raise ValueError("No active PR diff loaded in this investigation session.")
+        return {
+            "success": True,
+            "tool": "get_changed_files",
+            "files": [
+                {
+                    "file_path": fc.file_path,
+                    "status": fc.status,
+                    "additions": fc.additions,
+                    "deletions": fc.deletions,
+                    "modified_symbols": fc.modified_symbols
+                }
+                for fc in self._pr_analysis.file_changes
+            ]
+        }
+
+    def get_changed_symbols(self, file_path: Optional[str] = None) -> Dict[str, Any]:
+        if not hasattr(self, "_pr_analysis") or not self._pr_analysis:
+            raise ValueError("No active PR diff loaded in this investigation session.")
+        if file_path:
+            norm = file_path.replace("\\", "/").lstrip("/")
+            fc = next((f for f in self._pr_analysis.file_changes if f.file_path == norm), None)
+            syms = fc.modified_symbols if fc else []
+            return {"success": True, "tool": "get_changed_symbols", "file_path": norm, "symbols": syms}
+        all_syms: Dict[str, List[str]] = {
+            fc.file_path: fc.modified_symbols for fc in self._pr_analysis.file_changes if fc.modified_symbols
+        }
+        return {"success": True, "tool": "get_changed_symbols", "symbols_by_file": all_syms}
+
+    def review_architecture(self) -> Dict[str, Any]:
+        if not hasattr(self, "_pr_analysis") or not self._pr_analysis:
+            raise ValueError("No active PR diff loaded in this investigation session.")
+        arch = self._pr_analysis.architecture_impact
+        return {
+            "success": True,
+            "tool": "review_architecture",
+            "architecture_impact": _model_to_dict(arch)
+        }
+
+    def review_security(self) -> Dict[str, Any]:
+        if not hasattr(self, "_pr_analysis") or not self._pr_analysis:
+            raise ValueError("No active PR diff loaded in this investigation session.")
+        return {
+            "success": True,
+            "tool": "review_security",
+            "risks": [_model_to_dict(r) for r in self._pr_analysis.risks]
+        }
+
+    def review_tests(self) -> Dict[str, Any]:
+        if not hasattr(self, "_pr_analysis") or not self._pr_analysis:
+            raise ValueError("No active PR diff loaded in this investigation session.")
+        rec = self._pr_analysis.test_recommendations
+        return {
+            "success": True,
+            "tool": "review_tests",
+            "test_recommendations": _model_to_dict(rec)
+        }
+
+    def summarize_changes(self) -> Dict[str, Any]:
+        if not hasattr(self, "_pr_analysis") or not self._pr_analysis:
+            raise ValueError("No active PR diff loaded in this investigation session.")
+        summary = self._pr_analysis.summary
+        return {
+            "success": True,
+            "tool": "summarize_changes",
+            "summary": _model_to_dict(summary)
+        }
+
+
+def build_repository_tool_registry(
+    repo_index: RepositoryIndex,
+    diff_text: Optional[str] = None
+) -> RepositoryToolRegistry:
     tools = RepositoryAgentTools(repo_index)
     registry = RepositoryToolRegistry()
     registry.register(AgentToolSpec("search_repository", "Search indexed repository files and symbols.", {"query": "str", "limit": "int=10"}, tools.search_repository))
@@ -270,4 +355,23 @@ def build_repository_tool_registry(repo_index: RepositoryIndex) -> RepositoryToo
     registry.register(AgentToolSpec("find_tests", "Find tests related to a file or query.", {"file_path": "str|None", "query": "str|None", "limit": "int=20"}, tools.find_tests))
     registry.register(AgentToolSpec("get_architecture", "Return repository architecture summary and graph health.", {}, tools.get_architecture))
     registry.register(AgentToolSpec("get_git_activity", "Return most active files from Git/file activity metadata.", {"limit": "int=10"}, tools.get_git_activity))
+
+    # M7 PR Intelligence Tools
+    if diff_text:
+        from services.pr_service import pr_service
+        tools._pr_diff = diff_text
+        tools._pr_analysis = pr_service.analyze_pr(diff_text, repo_index=repo_index)
+        registry.register(AgentToolSpec("get_pr_diff", "Return full or per-file unified git diff patch.", {"file_path": "str|None"}, tools.get_pr_diff))
+        registry.register(AgentToolSpec("get_changed_files", "Return list of files modified, added, or deleted in PR.", {}, tools.get_changed_files))
+        registry.register(AgentToolSpec("get_changed_symbols", "Return functions and symbols modified in PR.", {"file_path": "str|None"}, tools.get_changed_symbols))
+        registry.register(AgentToolSpec("review_architecture", "Evaluate PR architectural impact and layer violations.", {}, tools.review_architecture))
+        registry.register(AgentToolSpec("review_security", "Return static security risks detected in PR diff additions.", {}, tools.review_security))
+        registry.register(AgentToolSpec("review_tests", "Return test impact, missing test alerts, and recommended scenarios.", {}, tools.review_tests))
+        registry.register(AgentToolSpec("summarize_changes", "Return executive and developer summary of PR changes.", {}, tools.summarize_changes))
+
     return registry
+
+
+def build_pr_tool_registry(repo_index: RepositoryIndex, diff_text: str) -> RepositoryToolRegistry:
+    return build_repository_tool_registry(repo_index, diff_text=diff_text)
+
