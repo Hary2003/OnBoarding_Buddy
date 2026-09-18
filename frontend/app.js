@@ -126,8 +126,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const targetPane = document.getElementById(btn.dataset.tab);
             if (targetPane) targetPane.classList.add("active");
 
-            if (btn.dataset.tab === "graph-tab" && currentSession) {
-                renderDependencyGraph();
+            if (btn.dataset.tab === "graph-tab") {
+                if (!currentSession) {
+                    fetch("/api/index?session_id=default")
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => { if (data) currentSession = data; })
+                        .catch(() => {});
+                }
+                setTimeout(() => {
+                    renderDependencyGraph();
+                }, 60);
             }
         });
     });
@@ -301,23 +309,39 @@ document.addEventListener("DOMContentLoaded", () => {
         const container = document.getElementById("network-graph");
         if (!container) return;
 
+        if (typeof vis === 'undefined') {
+            container.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);"><i class="fa-solid fa-triangle-exclamation"></i> Vis.js library could not be loaded. Please check network connection.</p></div>`;
+            return;
+        }
+
         const filterType = graphFilterSelect ? graphFilterSelect.value : "all";
         const layoutType = graphLayoutSelect ? graphLayoutSelect.value : "force";
         const includeExt = graphExternalChk ? graphExternalChk.checked : true;
 
         try {
+            // Show loading placeholder if canvas is not yet initialized
+            if (!container.querySelector("canvas")) {
+                container.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Loading dependency network (${filterType})...</p></div>`;
+            }
+
             const res = await fetch(`/api/graph?session_id=default&filter_type=${filterType}&include_external=${includeExt}`);
             const data = await res.json();
 
             if (!data.nodes || data.nodes.length === 0) {
-                container.innerHTML = `<div class="empty-state"><p>No dependency graph nodes found for filter mode: <strong>${filterType}</strong></p></div>`;
+                if (networkGraph) {
+                    networkGraph.destroy();
+                    networkGraph = null;
+                }
+                container.innerHTML = `<div class="empty-state"><p>No dependency nodes found for filter: <strong>${filterType}</strong></p><p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Try switching to <em>All Files & Modules</em> or click Reset View.</p></div>`;
                 return;
             }
 
+            // Clear container
+            container.innerHTML = "";
+
             const nodesDataSet = new vis.DataSet(data.nodes.map(n => {
-                // Compute size based on in_degree centrality
-                const baseSize = 14;
-                const sizeBonus = Math.min(24, (n.in_degree || 0) * 4);
+                const baseSize = 15;
+                const sizeBonus = Math.min(26, (n.in_degree || 0) * 4);
                 const finalSize = baseSize + sizeBonus;
 
                 let nodeColor = '#06b6d4'; // default cyan
@@ -328,7 +352,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (n.is_circular) nodeColor = '#f43f5e';
 
                 return {
-                    id: n.id,
+                    id: String(n.id),
                     label: n.label,
                     title: n.title,
                     shape: n.node_type === 'external_package' ? 'box' : (n.is_entry_point ? 'diamond' : 'dot'),
@@ -344,27 +368,85 @@ document.addEventListener("DOMContentLoaded", () => {
             }));
 
             const edgesDataSet = new vis.DataSet(data.edges.map(e => ({
-                from: e.from,
-                to: e.to,
+                from: String(e.from),
+                to: String(e.to),
                 arrows: 'to',
-                color: { color: e.edge_type === 'external_package' ? 'rgba(139,92,246,0.3)' : 'rgba(99,102,241,0.3)' },
-                width: 1
+                color: { color: e.edge_type === 'external_package' ? 'rgba(139,92,246,0.35)' : 'rgba(99,102,241,0.45)' },
+                width: 1.2
             })));
 
             const graphData = { nodes: nodesDataSet, edges: edgesDataSet };
+            const isTree = layoutType === 'tree';
+
             const options = {
-                physics: layoutType === 'force' ? {
+                autoResize: true,
+                layout: isTree ? {
+                    hierarchical: {
+                        enabled: true,
+                        direction: 'UD',
+                        sortMethod: 'hubsize',
+                        levelSeparation: 130,
+                        nodeSpacing: 160,
+                        treeSpacing: 220,
+                        blockShifting: true,
+                        edgeMinimization: true,
+                        parentCentralization: true
+                    }
+                } : {
+                    hierarchical: { enabled: false }
+                },
+                physics: isTree ? {
+                    enabled: true,
+                    solver: 'hierarchicalRepulsion',
+                    hierarchicalRepulsion: {
+                        nodeDistance: 150,
+                        centralGravity: 0.0,
+                        springLength: 110,
+                        springConstant: 0.01,
+                        damping: 0.09
+                    },
+                    stabilization: { iterations: 120, updateInterval: 25 }
+                } : {
+                    enabled: true,
                     solver: 'forceAtlas2Based',
-                    forceAtlas2Based: { gravitationalConstant: -35, centralGravity: 0.01, springLength: 100 }
-                } : false,
-                layout: layoutType === 'tree' ? {
-                    hierarchical: { direction: 'UD', sortMethod: 'directed', levelSeparation: 120 }
-                } : {},
-                interaction: { hover: true, tooltipDelay: 100 }
+                    forceAtlas2Based: {
+                        gravitationalConstant: -35,
+                        centralGravity: 0.01,
+                        springLength: 110,
+                        springConstant: 0.08,
+                        damping: 0.4,
+                        avoidOverlap: 0.6
+                    },
+                    stabilization: { iterations: 140, updateInterval: 25 }
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 100,
+                    zoomView: true,
+                    dragView: true,
+                    navigationButtons: true
+                }
             };
 
-            if (networkGraph) networkGraph.destroy();
+            if (networkGraph) {
+                networkGraph.destroy();
+                networkGraph = null;
+            }
             networkGraph = new vis.Network(container, graphData, options);
+
+            // Fit graph view once stabilized
+            networkGraph.once("stabilizationIterationsDone", () => {
+                networkGraph.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+            });
+
+            // Fallback fit in case stabilization finishes instantly
+            setTimeout(() => {
+                if (networkGraph) {
+                    networkGraph.setSize('100%', '100%');
+                    networkGraph.redraw();
+                    networkGraph.fit();
+                }
+            }, 300);
 
             // Handle Node Select / Click
             networkGraph.on("selectNode", (params) => {
@@ -382,7 +464,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
         } catch (err) {
-            container.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">Graph error: ${err.message}</p></div>`;
+            container.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);"><i class="fa-solid fa-triangle-exclamation"></i> Graph error: ${err.message}</p></div>`;
         }
     }
 
@@ -452,7 +534,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Toolbar Event Listeners
-    if (refreshGraphBtn) refreshGraphBtn.addEventListener("click", renderDependencyGraph);
+    if (refreshGraphBtn) {
+        refreshGraphBtn.addEventListener("click", () => {
+            if (graphFilterSelect) graphFilterSelect.value = "all";
+            if (graphLayoutSelect) graphLayoutSelect.value = "force";
+            if (graphExternalChk) graphExternalChk.checked = true;
+            renderDependencyGraph();
+        });
+    }
     if (graphFilterSelect) graphFilterSelect.addEventListener("change", renderDependencyGraph);
     if (graphLayoutSelect) graphLayoutSelect.addEventListener("change", renderDependencyGraph);
     if (graphExternalChk) graphExternalChk.addEventListener("change", renderDependencyGraph);
