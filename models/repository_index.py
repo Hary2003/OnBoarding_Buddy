@@ -266,3 +266,106 @@ class AgentExploreResponse(BaseModel):
     trace: List[AgentTraceEvent] = Field(default_factory=list, description="Public agent trace")
     iterations: int = Field(0, description="Loop iterations completed")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Agent limits and execution metadata")
+
+# --- M7 Pull Request Intelligence & Code Review Models ---
+
+class CodeChange(BaseModel):
+    file_path: str = Field(..., description="File path of the change")
+    change_type: str = Field(..., description="Change type: added, removed, context")
+    old_line_number: Optional[int] = Field(None, description="Line number in base file")
+    new_line_number: Optional[int] = Field(None, description="Line number in modified file")
+    content: str = Field(..., description="Source code text line")
+
+class DiffHunk(BaseModel):
+    old_start: int = Field(0, description="Starting line in old version")
+    old_lines: int = Field(0, description="Line count in old version")
+    new_start: int = Field(0, description="Starting line in new version")
+    new_lines: int = Field(0, description="Line count in new version")
+    header: str = Field("", description="Hunk header context (e.g., function definition)")
+    lines: List[str] = Field(default_factory=list, description="Raw lines inside this hunk")
+
+class FileChange(BaseModel):
+    file_path: str = Field(..., description="Target file path in repository")
+    old_path: Optional[str] = Field(None, description="Previous file path if renamed or moved")
+    status: str = Field(..., description="Change status: added, modified, deleted, renamed")
+    additions: int = Field(0, description="Number of added lines")
+    deletions: int = Field(0, description="Number of removed lines")
+    modified_symbols: List[str] = Field(default_factory=list, description="Functions, classes, or methods affected")
+    hunks: List[DiffHunk] = Field(default_factory=list, description="Parsed diff hunks")
+    patch: str = Field("", description="Unified diff patch chunk for this file")
+
+class PRSummary(BaseModel):
+    title: str = Field("", description="Pull request title or inferred topic")
+    executive_summary: str = Field("", description="High-level business & risk overview of what changed and why")
+    developer_summary: str = Field("", description="Technical summary of modified components, symbols, and tests")
+    change_type: str = Field("feature", description="Classification: feature, bug_fix, refactor, test_update, configuration_change, documentation_update")
+    risk_level: str = Field("Low", description="Overall risk level: Critical, High, Medium, Low")
+    files_changed: int = Field(0, description="Total count of files modified")
+    lines_added: int = Field(0, description="Total additions")
+    lines_removed: int = Field(0, description="Total deletions")
+    author: Optional[str] = Field(None, description="PR or commit author")
+    commit_references: List[str] = Field(default_factory=list, description="Commit hashes or references")
+
+class ArchitectureImpact(BaseModel):
+    affected_entry_points: List[str] = Field(default_factory=list, description="Application entry points impacted")
+    affected_modules: List[str] = Field(default_factory=list, description="Core and standard modules affected")
+    affected_services: List[str] = Field(default_factory=list, description="Service layer components impacted")
+    affected_apis: List[str] = Field(default_factory=list, description="API endpoints or route definitions impacted")
+    upstream_impact: List[str] = Field(default_factory=list, description="Upstream callers or dependents impacted")
+    downstream_impact: List[str] = Field(default_factory=list, description="Downstream dependencies imported by changed files")
+    architectural_layers: List[str] = Field(default_factory=list, description="Architectural layers touched (api, service, model, utility, config, test)")
+    layer_violations: List[str] = Field(default_factory=list, description="Detected architectural layer violations")
+    circular_dependency_risks: List[str] = Field(default_factory=list, description="Risks of new circular dependencies")
+    god_module_risks: List[str] = Field(default_factory=list, description="Modules growing excessively large or complex")
+    coupling_increase_score: float = Field(0.0, description="Heuristic score for increased system coupling")
+
+class TestRecommendation(BaseModel):
+    related_tests: List[str] = Field(default_factory=list, description="Existing test files mapped to changed files")
+    missing_tests: List[str] = Field(default_factory=list, description="Files with logic changes that lack corresponding tests")
+    outdated_tests: List[str] = Field(default_factory=list, description="Tests calling altered function signatures")
+    recommended_test_files: List[str] = Field(default_factory=list, description="Test files recommended to run")
+    recommended_scenarios: List[str] = Field(default_factory=list, description="Unit and integration test scenarios to add")
+    recommended_edge_cases: List[str] = Field(default_factory=list, description="Boundary and edge conditions to verify")
+    recommended_integration_tests: List[str] = Field(default_factory=list, description="Cross-module integration test recommendations")
+
+class RiskAssessment(BaseModel):
+    risk_id: str = Field(..., description="Unique risk identifier")
+    title: str = Field(..., description="Short summary of the risk")
+    category: str = Field("security", description="Category: security, architecture, maintainability, test_coverage")
+    severity: str = Field("Medium", description="Severity: Critical, High, Medium, Low")
+    file_path: str = Field(..., description="Affected repository file")
+    line_number: Optional[int] = Field(None, description="Line number if localized")
+    evidence: str = Field("", description="Supporting code snippet or diff hunk")
+    remediation: str = Field("", description="Recommended fix or preventive action")
+
+class ReviewComment(BaseModel):
+    comment_id: str = Field(..., description="Unique comment identifier")
+    file_path: str = Field(..., description="Target file path")
+    line_number: Optional[int] = Field(None, description="Specific line number in diff")
+    symbol_name: Optional[str] = Field(None, description="Affected symbol or function name")
+    severity: str = Field("warning", description="Severity: critical, warning, suggestion, nitpick")
+    title: str = Field(..., description="Concise comment headline")
+    body: str = Field(..., description="Detailed review feedback")
+    evidence: str = Field("", description="Code evidence snippet")
+    recommendation: str = Field("", description="Concrete action recommendation or code snippet")
+
+class PullRequestAnalysis(BaseModel):
+    pr_id: str = Field("pr_1", description="Pull request identifier")
+    summary: PRSummary = Field(..., description="Executive and developer summaries")
+    file_changes: List[FileChange] = Field(default_factory=list, description="Structured per-file diff analysis")
+    architecture_impact: ArchitectureImpact = Field(default_factory=ArchitectureImpact, description="Architecture and dependency impact")
+    test_recommendations: TestRecommendation = Field(default_factory=TestRecommendation, description="Test coverage and scenario recommendations")
+    risks: List[RiskAssessment] = Field(default_factory=list, description="Static security and architectural risks")
+    review_comments: List[ReviewComment] = Field(default_factory=list, description="Actionable inline review comments")
+    analyzed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="ISO timestamp")
+
+class PRReviewResponse(BaseModel):
+    verdict: str = Field("COMMENT", description="Review verdict: APPROVE, REQUEST_CHANGES, COMMENT")
+    summary: PRSummary = Field(..., description="High-level PR summary")
+    positive_findings: List[str] = Field(default_factory=list, description="Well-implemented aspects of the PR")
+    risks: List[RiskAssessment] = Field(default_factory=list, description="Identified risks across security, architecture, and tests")
+    suggestions: List[str] = Field(default_factory=list, description="Improvement and refactoring suggestions")
+    required_follow_ups: List[str] = Field(default_factory=list, description="Mandatory actions before merging")
+    review_comments: List[ReviewComment] = Field(default_factory=list, description="Evidence-backed review comments")
+    sources: List[SourceAttribution] = Field(default_factory=list, description="Repository sources cited in review")
+
