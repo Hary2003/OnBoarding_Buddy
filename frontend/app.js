@@ -1,31 +1,80 @@
 document.addEventListener("DOMContentLoaded", () => {
-    // State Variables
+    // Application State
     let currentSession = null;
     let selectedFilePath = null;
     let networkGraph = null;
     let currentInspectorNode = null;
+    let auditReportCache = null;
 
-    // DOM Elements
+    // DOM Elements - Shell & Navigation
+    const repoSwitcherBtn = document.getElementById("repo-switcher-btn");
+    const currentRepoLabel = document.getElementById("current-repo-label");
+    const quickRescanBtn = document.getElementById("quick-rescan-btn");
+    const groqStatus = document.getElementById("groq-status");
+    const navItems = document.querySelectorAll(".nav-item");
+    const tabPanes = document.querySelectorAll(".tab-pane");
+    const navFileCount = document.getElementById("nav-file-count");
+    const navContribCount = document.getElementById("nav-contrib-count");
+    const footerSessionName = document.getElementById("footer-session-name");
+    const footerIndexedTime = document.getElementById("footer-indexed-time");
+
+    // Modals
+    const repoModal = document.getElementById("repo-modal");
+    const closeRepoModalBtn = document.getElementById("close-repo-modal-btn");
+    const cancelRepoModalBtn = document.getElementById("cancel-repo-modal-btn");
     const repoForm = document.getElementById("repo-form");
     const repoInput = document.getElementById("repo-input");
     const analyzeBtn = document.getElementById("analyze-btn");
-    const groqStatus = document.getElementById("groq-status");
-    
+    const repoAnalyzeStatus = document.getElementById("repo-analyze-status");
+
+    const guideModal = document.getElementById("guide-modal");
+    const openGuideModalBtn = document.getElementById("open-guide-modal-btn");
+    const closeGuideModalBtn = document.getElementById("close-guide-modal-btn");
+    const generateGuideBtn = document.getElementById("generate-guide-btn");
+    const guideContent = document.getElementById("guide-content");
+    const overviewGuideBtn = document.getElementById("overview-guide-btn");
+    const overviewRescanBtn = document.getElementById("overview-rescan-btn");
+
+    // Overview Elements
+    const statFilesVal = document.getElementById("stat-files-val");
+    const statLinesMeta = document.getElementById("stat-lines-meta");
+    const statModulesVal = document.getElementById("stat-modules-val");
+    const statModulesMeta = document.getElementById("stat-modules-meta");
+    const statEntryVal = document.getElementById("stat-entry-val");
+    const statEntryMeta = document.getElementById("stat-entry-meta");
+    const statAuditVal = document.getElementById("stat-audit-val");
+    const statAuditMeta = document.getElementById("stat-audit-meta");
+    const overviewArchType = document.getElementById("overview-arch-type");
+    const overviewArchNarrative = document.getElementById("overview-arch-narrative");
+    const refreshNarrativeBtn = document.getElementById("refresh-narrative-btn");
+    const viewGraphJumpBtn = document.getElementById("view-graph-jump-btn");
+    const overviewCoreModulesTbody = document.getElementById("overview-core-modules-tbody");
+    const overviewEntryPointsList = document.getElementById("overview-entry-points-list");
+    const overviewActiveFilesTbody = document.getElementById("overview-active-files-tbody");
+    const overviewLangBar = document.getElementById("overview-lang-bar");
+    const overviewLangLegend = document.getElementById("overview-lang-legend");
+    const overviewLangCount = document.getElementById("overview-lang-count");
+    const overviewFindingsBadge = document.getElementById("overview-findings-badge");
+    const overviewFindingsBody = document.getElementById("overview-findings-body");
+
+    // Repository Elements
+    const repoSearch = document.getElementById("repo-search");
     const treeContainer = document.getElementById("tree-container");
     const fileCount = document.getElementById("file-count");
     const currentFilename = document.getElementById("current-filename");
+    const currentFileLines = document.getElementById("current-file-lines");
+    const copyCodeBtn = document.getElementById("copy-code-btn");
     const codeContent = document.getElementById("code-content");
     const summarizeBtn = document.getElementById("summarize-btn");
     const summaryText = document.getElementById("summary-text");
-    
-    const generateGuideBtn = document.getElementById("generate-guide-btn");
-    const guideContent = document.getElementById("guide-content");
-    
+    const fileSymbolsList = document.getElementById("file-symbols-list");
+    const fileDepsList = document.getElementById("file-deps-list");
+
+    // Architecture Elements
     const refreshGraphBtn = document.getElementById("refresh-graph-btn");
     const graphFilterSelect = document.getElementById("graph-filter-select");
     const graphLayoutSelect = document.getElementById("graph-layout-select");
     const graphExternalChk = document.getElementById("graph-external-chk");
-
     const nodeInspector = document.getElementById("node-inspector");
     const closeInspectorBtn = document.getElementById("close-inspector-btn");
     const inspectorNodeTitle = document.getElementById("inspector-node-title");
@@ -36,19 +85,27 @@ document.addEventListener("DOMContentLoaded", () => {
     const inspectorDepsList = document.getElementById("inspector-deps-list");
     const inspectorSymbolsList = document.getElementById("inspector-symbols-list");
     const jumpCodeBtn = document.getElementById("jump-code-btn");
-    
+    const archModulesTbody = document.getElementById("arch-modules-tbody");
+    const archCyclesList = document.getElementById("arch-cycles-list");
+    const archCyclesCount = document.getElementById("arch-cycles-count");
+
+    // AI Assistant Elements
     const chatForm = document.getElementById("chat-form");
     const chatInput = document.getElementById("chat-input");
     const chatMessages = document.getElementById("chat-messages");
+    const clearChatBtn = document.getElementById("clear-chat-btn");
+    const chatModelTag = document.getElementById("chat-model-tag");
 
+    // Contribution Elements
+    const auditRepoBtn = document.getElementById("audit-repo-btn");
+    const auditOpportunitiesContainer = document.getElementById("audit-opportunities-container");
     const contribForm = document.getElementById("contribution-form");
     const issueTitle = document.getElementById("issue-title");
     const issueDesc = document.getElementById("issue-desc");
     const analyzeContribBtn = document.getElementById("analyze-contrib-btn");
     const contributionContent = document.getElementById("contribution-content");
-    const auditRepoBtn = document.getElementById("audit-repo-btn");
-    const auditOpportunitiesContainer = document.getElementById("audit-opportunities-container");
 
+    // Agent Elements
     const agentForm = document.getElementById("agent-form");
     const agentInput = document.getElementById("agent-input");
     const agentExploreBtn = document.getElementById("agent-explore-btn");
@@ -57,54 +114,142 @@ document.addEventListener("DOMContentLoaded", () => {
     const agentFiles = document.getElementById("agent-files");
     const agentSources = document.getElementById("agent-sources");
     const agentSummary = document.getElementById("agent-summary");
+    const agentStepCount = document.getElementById("agent-step-count");
 
-    // Check Backend Health & Groq Status on Startup
+    // PR Review Elements
+    const prForm = document.getElementById("pr-form");
+    const prTitleInput = document.getElementById("pr-title-input");
+    const prFileInput = document.getElementById("pr-file-input");
+    const prDiffInput = document.getElementById("pr-diff-input");
+    const prAnalyzeBtn = document.getElementById("pr-analyze-btn");
+    const prReviewBtn = document.getElementById("pr-review-btn");
+    const prResultsContainer = document.getElementById("pr-results-container");
+    const prEmptyState = document.getElementById("pr-empty-state");
+    const prMetricsBar = document.getElementById("pr-metrics-bar");
+    const prSummaries = document.getElementById("pr-summaries");
+    const loadFeatureBtn = document.getElementById("pr-load-feature-btn");
+    const loadVulnBtn = document.getElementById("pr-load-vuln-btn");
+    const loadArchBtn = document.getElementById("pr-load-arch-btn");
+
+    // Helper: Escape HTML
+    function escapeHtml(value) {
+        return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    // --- Tab Navigation Switcher ---
+    function switchTab(tabId) {
+        navItems.forEach(btn => {
+            if (btn.dataset.tab === tabId) {
+                btn.classList.add("active");
+            } else {
+                btn.classList.remove("active");
+            }
+        });
+
+        tabPanes.forEach(pane => {
+            if (pane.id === tabId) {
+                pane.classList.add("active");
+            } else {
+                pane.classList.remove("active");
+            }
+        });
+
+        if (tabId === "architecture-tab") {
+            setTimeout(() => {
+                if (networkGraph) {
+                    networkGraph.setSize("100%", "100%");
+                    networkGraph.redraw();
+                    networkGraph.fit();
+                } else {
+                    renderDependencyGraph();
+                }
+            }, 60);
+        } else if (tabId === "overview-tab" && currentSession) {
+            populateOverview(currentSession);
+        }
+    }
+
+    navItems.forEach(btn => {
+        btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    });
+
+    if (viewGraphJumpBtn) {
+        viewGraphJumpBtn.addEventListener("click", () => switchTab("architecture-tab"));
+    }
+
+    // --- Modal Handlers ---
+    function openRepoModal() {
+        if (repoModal) repoModal.classList.add("open");
+    }
+    function closeRepoModal() {
+        if (repoModal) repoModal.classList.remove("open");
+    }
+    if (repoSwitcherBtn) repoSwitcherBtn.addEventListener("click", openRepoModal);
+    if (quickRescanBtn) quickRescanBtn.addEventListener("click", openRepoModal);
+    if (overviewRescanBtn) overviewRescanBtn.addEventListener("click", openRepoModal);
+    if (closeRepoModalBtn) closeRepoModalBtn.addEventListener("click", closeRepoModal);
+    if (cancelRepoModalBtn) cancelRepoModalBtn.addEventListener("click", closeRepoModal);
+
+    function openGuideModal() {
+        if (guideModal) guideModal.classList.add("open");
+    }
+    function closeGuideModal() {
+        if (guideModal) guideModal.classList.remove("open");
+    }
+    if (openGuideModalBtn) openGuideModalBtn.addEventListener("click", openGuideModal);
+    if (overviewGuideBtn) overviewGuideBtn.addEventListener("click", openGuideModal);
+    if (closeGuideModalBtn) closeGuideModalBtn.addEventListener("click", closeGuideModal);
+
+    // Close modals on clicking backdrop outside dialog
+    [repoModal, guideModal].forEach(modal => {
+        if (modal) {
+            modal.addEventListener("click", (e) => {
+                if (e.target === modal) modal.classList.remove("open");
+            });
+        }
+    });
+
+    // Sample Repo buttons in Switcher Modal
+    document.querySelectorAll(".sample-repo-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            if (repoInput) repoInput.value = btn.dataset.url;
+        });
+    });
+
+    // --- Backend Health Check ---
     async function checkHealth() {
         try {
             const res = await fetch("/api/health");
             const data = await res.json();
             if (data.groq_configured) {
-                groqStatus.innerHTML = `<span class="pulse-dot green"></span> Groq AI Connected (${data.groq_model})`;
+                groqStatus.innerHTML = `<span class="status-dot green"></span> <span>Groq AI Connected (${data.groq_model || 'LLaMA 3.3'})</span>`;
+                if (chatModelTag) chatModelTag.textContent = data.groq_model || "Groq LLaMA 3.3";
             } else {
-                groqStatus.innerHTML = `<span class="pulse-dot red"></span> Groq API Key Missing (.env)`;
+                groqStatus.innerHTML = `<span class="status-dot amber"></span> <span>Groq API Key Missing (.env)</span>`;
             }
         } catch (err) {
-            groqStatus.innerHTML = `<span class="pulse-dot red"></span> Backend Offline`;
+            groqStatus.innerHTML = `<span class="status-dot red"></span> <span>Backend Offline</span>`;
         }
     }
     checkHealth();
 
-    // Auto-restore active session from server or auto-index default repository
+    // --- Auto-Load / Restore Session on Startup ---
     async function autoLoadSession() {
         try {
             const res = await fetch("/api/index?session_id=default");
             if (res.ok) {
                 const repoIndex = await res.json();
-                currentSession = repoIndex;
-                fileCount.textContent = `${repoIndex.total_files} files (${repoIndex.total_lines} lines)`;
-                renderFilesIndex(repoIndex.files);
-                if (repoIndex.files.length > 0) {
-                    const topFile = repoIndex.files.find(f => f.is_entry_point) || repoIndex.files[0];
-                    loadFileContent(topFile.full_path, topFile.relative_path);
-                }
+                applyRepositorySession(repoIndex);
             } else {
-                const target = repoInput.value.trim();
+                // Index default requests repository if nothing in cache
+                const target = repoInput ? repoInput.value.trim() : "https://github.com/psf/requests";
                 if (target) {
-                    const cloneRes = await fetch("/api/clone", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ url_or_path: target })
-                    });
-                    if (cloneRes.ok) {
-                        const repoIndex = await cloneRes.json();
-                        currentSession = repoIndex;
-                        fileCount.textContent = `${repoIndex.total_files} files (${repoIndex.total_lines} lines)`;
-                        renderFilesIndex(repoIndex.files);
-                        if (repoIndex.files.length > 0) {
-                            const topFile = repoIndex.files.find(f => f.is_entry_point) || repoIndex.files[0];
-                            loadFileContent(topFile.full_path, topFile.relative_path);
-                        }
-                    }
+                    analyzeRepository(target);
                 }
             }
         } catch (err) {
@@ -113,48 +258,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     autoLoadSession();
 
-    // Tab Switching Logic
-    const tabBtns = document.querySelectorAll(".tab-btn");
-    const tabPanes = document.querySelectorAll(".tab-pane");
+    // --- Analyze / Clone Repository ---
+    async function analyzeRepository(targetUrlOrPath) {
+        if (!targetUrlOrPath) return;
 
-    tabBtns.forEach(btn => {
-        btn.addEventListener("click", () => {
-            tabBtns.forEach(b => b.classList.remove("active"));
-            tabPanes.forEach(p => p.classList.remove("active"));
-
-            btn.classList.add("active");
-            const targetPane = document.getElementById(btn.dataset.tab);
-            if (targetPane) targetPane.classList.add("active");
-
-            if (btn.dataset.tab === "graph-tab") {
-                if (!currentSession) {
-                    fetch("/api/index?session_id=default")
-                        .then(r => r.ok ? r.json() : null)
-                        .then(data => { if (data) currentSession = data; })
-                        .catch(() => {});
-                }
-                setTimeout(() => {
-                    renderDependencyGraph();
-                }, 60);
-            }
-        });
-    });
-
-    // Handle Repo Analysis
-    repoForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const target = repoInput.value.trim();
-        if (!target) return;
-
-        analyzeBtn.disabled = true;
-        analyzeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Indexing...`;
-        treeContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Parsing AST, computing activity scores, and detecting entry points...</p></div>`;
+        if (analyzeBtn) {
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Indexing AST...`;
+        }
+        if (repoAnalyzeStatus) {
+            repoAnalyzeStatus.innerHTML = `<span style="color: var(--accent-primary);"><i class="fa-solid fa-spinner fa-spin"></i> Parsing AST, computing activity scores, and extracting graph...</span>`;
+        }
 
         try {
             const res = await fetch("/api/clone", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url_or_path: target })
+                body: JSON.stringify({ url_or_path: targetUrlOrPath })
             });
 
             if (!res.ok) {
@@ -163,50 +283,356 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             const repoIndex = await res.json();
-            currentSession = repoIndex;
-            fileCount.textContent = `${repoIndex.total_files} files (${repoIndex.total_lines} lines)`;
-            
-            renderFilesIndex(repoIndex.files);
-            analyzeBtn.disabled = false;
-            analyzeBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Repo`;
+            applyRepositorySession(repoIndex);
+            closeRepoModal();
 
-            if (repoIndex.files.length > 0) {
-                const topFile = repoIndex.files.find(f => f.is_entry_point) || repoIndex.files[0];
-                loadFileContent(topFile.full_path, topFile.relative_path);
-            }
-
+            if (repoAnalyzeStatus) repoAnalyzeStatus.innerHTML = "";
         } catch (err) {
-            analyzeBtn.disabled = false;
-            analyzeBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Repo`;
-            treeContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-triangle-exclamation" style="color: var(--accent-rose);"></i><p>${err.message}</p></div>`;
+            if (repoAnalyzeStatus) {
+                repoAnalyzeStatus.innerHTML = `<span style="color: var(--color-danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(err.message)}</span>`;
+            }
+            alert(`Analysis error: ${err.message}`);
+        } finally {
+            if (analyzeBtn) {
+                analyzeBtn.disabled = false;
+                analyzeBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Repository`;
+            }
         }
-    });
+    }
 
-    // Render Files List from RepositoryIndex
+    if (repoForm) {
+        repoForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const target = repoInput ? repoInput.value.trim() : "";
+            analyzeRepository(target);
+        });
+    }
+
+    // --- Apply Active Repository Session Across All Views ---
+    function applyRepositorySession(repoIndex) {
+        currentSession = repoIndex;
+
+        // Shell Headers & Badges
+        const repoName = repoIndex.repo_name || "repository";
+        if (currentRepoLabel) currentRepoLabel.textContent = repoName;
+        if (footerSessionName) footerSessionName.textContent = repoName;
+        if (footerIndexedTime) {
+            footerIndexedTime.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        if (navFileCount) navFileCount.textContent = repoIndex.total_files || 0;
+        if (fileCount) fileCount.textContent = `${repoIndex.total_files} files`;
+
+        // 1. Populate Overview View
+        populateOverview(repoIndex);
+
+        // 2. Populate Repository View File Tree
+        renderFilesIndex(repoIndex.files);
+        if (repoIndex.files && repoIndex.files.length > 0) {
+            const topFile = repoIndex.files.find(f => f.is_entry_point) || repoIndex.files[0];
+            loadFileContent(topFile.full_path, topFile.relative_path);
+        }
+
+        // 3. Populate Architecture Modules Table & Cycles
+        populateArchitectureTables(repoIndex);
+
+        // 4. Trigger Background Audit for Badges & Findings
+        fetchBackgroundAudit();
+    }
+
+    // =========================================================================
+    // PAGE 1: OVERVIEW TAB LOGIC
+    // =========================================================================
+    function populateOverview(repoIndex) {
+        if (!repoIndex) return;
+
+        // Top 4 Stat Cards
+        if (statFilesVal) statFilesVal.textContent = (repoIndex.total_files || 0).toLocaleString();
+        if (statLinesMeta) statLinesMeta.textContent = `${(repoIndex.total_lines || 0).toLocaleString()} total source lines`;
+
+        const moduleCounts = repoIndex.module_counts || {};
+        const totalModules = Object.values(moduleCounts).reduce((a, b) => a + b, 0);
+        if (statModulesVal) statModulesVal.textContent = totalModules.toLocaleString() || repoIndex.total_files;
+        if (statModulesMeta) {
+            const coreCount = moduleCounts.core || 0;
+            const utilCount = moduleCounts.utility || 0;
+            statModulesMeta.textContent = `${coreCount} core · ${utilCount} utilities`;
+        }
+
+        const entryCount = (repoIndex.entry_points || []).length;
+        if (statEntryVal) statEntryVal.textContent = entryCount;
+        if (statEntryMeta) statEntryMeta.textContent = entryCount > 0 ? "Application entry points detected" : "Standard library structure";
+
+        // Architecture Narrative Card
+        const arch = repoIndex.architecture_summary;
+        if (overviewArchType) {
+            overviewArchType.textContent = arch ? arch.architecture_type : "Modular API";
+        }
+        if (overviewArchNarrative) {
+            if (arch && arch.overview_narrative) {
+                overviewArchNarrative.innerHTML = marked.parse(arch.overview_narrative);
+            } else {
+                overviewArchNarrative.innerHTML = `
+                    <p>The codebase is structured as a <strong>${arch ? arch.architecture_type : 'Modular API'}</strong> architecture comprising ${repoIndex.total_files} analyzed files across ${Object.keys(repoIndex.languages_breakdown || {}).length} language groups.</p>
+                    <p>Central modules handle core orchestration with high in-degree connectivity, supported by shared utilities and isolated domain components.</p>
+                `;
+            }
+        }
+
+        // Core Architecture Modules Table
+        if (overviewCoreModulesTbody) {
+            const sortedByInDegree = [...(repoIndex.files || [])].sort((a, b) => b.in_degree - a.in_degree).slice(0, 6);
+            if (sortedByInDegree.length === 0) {
+                overviewCoreModulesTbody.innerHTML = `<tr><td colspan="5" class="empty-state">No core modules identified.</td></tr>`;
+            } else {
+                overviewCoreModulesTbody.innerHTML = sortedByInDegree.map(file => `
+                    <tr>
+                        <td>
+                            <strong style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(file.relative_path)}</strong>
+                            ${file.is_entry_point ? '<span class="badge badge-green" style="font-size: 9px; margin-left: 4px;">🚀 Entry</span>' : ''}
+                        </td>
+                        <td><span class="badge badge-blue">${file.in_degree || 0}</span></td>
+                        <td><span class="badge">${file.out_degree || 0}</span></td>
+                        <td><span class="badge" style="text-transform: capitalize;">${escapeHtml(file.module_category || 'standard')}</span></td>
+                        <td>
+                            <button type="button" class="btn btn-secondary btn-sm jump-file-btn" data-fullpath="${escapeHtml(file.full_path)}" data-relpath="${escapeHtml(file.relative_path)}">
+                                <i class="fa-regular fa-file-code"></i> View
+                            </button>
+                        </td>
+                    </tr>
+                `).join("");
+
+                overviewCoreModulesTbody.querySelectorAll(".jump-file-btn").forEach(btn => {
+                    btn.addEventListener("click", () => {
+                        switchTab("repository-tab");
+                        loadFileContent(btn.dataset.fullpath, btn.dataset.relpath);
+                    });
+                });
+            }
+        }
+
+        // Detected Entry Points List
+        if (overviewEntryPointsList) {
+            const entryPoints = repoIndex.entry_points || [];
+            if (entryPoints.length === 0) {
+                overviewEntryPointsList.innerHTML = `<span class="text-muted" style="font-size: 12px;">No standalone entry points detected.</span>`;
+            } else {
+                overviewEntryPointsList.innerHTML = entryPoints.map(ep => `
+                    <button type="button" class="citation-chip jump-entry-btn" data-path="${escapeHtml(ep)}" style="font-size: 12px; padding: 4px 10px;">
+                        <i class="fa-solid fa-rocket" style="color: var(--color-success);"></i> ${escapeHtml(ep)}
+                    </button>
+                `).join("");
+
+                overviewEntryPointsList.querySelectorAll(".jump-entry-btn").forEach(btn => {
+                    btn.addEventListener("click", () => {
+                        const targetRel = btn.dataset.path;
+                        const match = repoIndex.files.find(f => f.relative_path === targetRel);
+                        if (match) {
+                            switchTab("repository-tab");
+                            loadFileContent(match.full_path, match.relative_path);
+                        }
+                    });
+                });
+            }
+        }
+
+        // Most Active Files Table
+        if (overviewActiveFilesTbody) {
+            const topActive = [...(repoIndex.files || [])].sort((a, b) => b.activity_score - a.activity_score).slice(0, 6);
+            if (topActive.length === 0) {
+                overviewActiveFilesTbody.innerHTML = `<tr><td colspan="4" class="empty-state">No file activity data.</td></tr>`;
+            } else {
+                overviewActiveFilesTbody.innerHTML = topActive.map(file => `
+                    <tr>
+                        <td>
+                            <span style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(file.relative_path)}</span>
+                        </td>
+                        <td><strong style="color: var(--accent-primary); font-family: var(--font-mono);">${file.activity_score || 0}</strong></td>
+                        <td>${(file.line_count || 0).toLocaleString()}</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary btn-sm jump-file-btn" data-fullpath="${escapeHtml(file.full_path)}" data-relpath="${escapeHtml(file.relative_path)}">
+                                Inspect
+                            </button>
+                        </td>
+                    </tr>
+                `).join("");
+
+                overviewActiveFilesTbody.querySelectorAll(".jump-file-btn").forEach(btn => {
+                    btn.addEventListener("click", () => {
+                        switchTab("repository-tab");
+                        loadFileContent(btn.dataset.fullpath, btn.dataset.relpath);
+                    });
+                });
+            }
+        }
+
+        // Language Distribution Bar & Legend
+        if (overviewLangBar && overviewLangLegend) {
+            const langs = repoIndex.languages_breakdown || {};
+            const totalLangFiles = Object.values(langs).reduce((a, b) => a + b, 0) || 1;
+            const langColors = {
+                python: "#3572A5",
+                javascript: "#f1e05a",
+                typescript: "#3178c6",
+                html: "#e34c26",
+                css: "#563d7c",
+                markdown: "#083fa1",
+                json: "#292929",
+                shell: "#89e051"
+            };
+
+            const sortedLangs = Object.entries(langs).sort((a, b) => b[1] - a[1]);
+            if (overviewLangCount) overviewLangCount.textContent = `${sortedLangs.length} languages`;
+
+            overviewLangBar.innerHTML = sortedLangs.map(([lang, count]) => {
+                const pct = ((count / totalLangFiles) * 100).toFixed(1);
+                const color = langColors[lang.toLowerCase()] || "#64748b";
+                return `<div class="lang-bar-segment" style="width: ${pct}%; background: ${color};" title="${lang}: ${pct}% (${count} files)"></div>`;
+            }).join("");
+
+            overviewLangLegend.innerHTML = sortedLangs.map(([lang, count]) => {
+                const pct = ((count / totalLangFiles) * 100).toFixed(1);
+                const color = langColors[lang.toLowerCase()] || "#64748b";
+                return `
+                    <div class="lang-legend-item">
+                        <span class="lang-legend-dot" style="background: ${color};"></span>
+                        <strong style="text-transform: capitalize;">${escapeHtml(lang)}</strong>
+                        <span style="color: var(--text-muted);">${pct}%</span>
+                    </div>
+                `;
+            }).join("");
+        }
+    }
+
+    // Refresh Groq Deep Narrative
+    if (refreshNarrativeBtn) {
+        refreshNarrativeBtn.addEventListener("click", async () => {
+            if (!currentSession) return;
+            refreshNarrativeBtn.disabled = true;
+            refreshNarrativeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating Narrative...`;
+
+            try {
+                const res = await fetch("/api/architecture?session_id=default&use_llm=true");
+                if (!res.ok) throw new Error("Failed to generate narrative.");
+                const data = await res.json();
+                const narrative = data.architecture_summary?.overview_narrative;
+                if (narrative && overviewArchNarrative) {
+                    overviewArchNarrative.innerHTML = marked.parse(narrative);
+                }
+            } catch (err) {
+                alert(`Narrative error: ${err.message}`);
+            } finally {
+                refreshNarrativeBtn.disabled = false;
+                refreshNarrativeBtn.innerHTML = `<i class="fa-solid fa-bolt"></i> Generate Groq Deep Narrative`;
+            }
+        });
+    }
+
+    // Background Audit Fetch for Overview & Navigation Badges
+    async function fetchBackgroundAudit() {
+        try {
+            const res = await fetch("/api/contribution/audit", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: "default" })
+            });
+            if (res.ok) {
+                const audit = await res.json();
+                auditReportCache = audit;
+                const total = audit.total_opportunities || 0;
+                if (statAuditVal) statAuditVal.textContent = total;
+                if (statAuditMeta) {
+                    statAuditMeta.textContent = `${audit.critical_count || 0} critical · ${audit.high_count || 0} high risks`;
+                }
+                if (navContribCount) navContribCount.textContent = total;
+                if (overviewFindingsBadge) {
+                    overviewFindingsBadge.textContent = `${total} Findings`;
+                    overviewFindingsBadge.className = total > 0 ? "badge badge-amber" : "badge badge-green";
+                }
+
+                if (overviewFindingsBody) {
+                    if (total === 0) {
+                        overviewFindingsBody.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 8px; color: var(--color-success);">
+                                <i class="fa-solid fa-circle-check"></i>
+                                <span>No critical vulnerabilities or test gaps detected. Excellent health!</span>
+                            </div>
+                        `;
+                    } else {
+                        const topOpps = (audit.opportunities || []).slice(0, 3);
+                        overviewFindingsBody.innerHTML = `
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                ${topOpps.map(opp => `
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: var(--bg-subtle); border-radius: var(--radius-sm);">
+                                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px;">
+                                            <span class="badge ${opp.severity === 'Critical' ? 'badge-red' : opp.severity === 'High' ? 'badge-amber' : 'badge-blue'}" style="font-size: 10px;">${opp.severity}</span>
+                                            <span style="font-size: 12px; margin-left: 4px;">${escapeHtml(opp.title)}</span>
+                                        </div>
+                                        <button type="button" class="btn btn-secondary btn-sm jump-contrib-btn" data-title="${encodeURIComponent(opp.suggested_issue_title)}" data-desc="${encodeURIComponent(opp.suggested_issue_desc)}">
+                                            Fix Plan
+                                        </button>
+                                    </div>
+                                `).join("")}
+                                <button type="button" id="overview-view-all-findings" class="btn btn-secondary btn-sm" style="margin-top: 4px; width: 100%;">
+                                    View All ${total} Contribution Opportunities in Contributions Tab →
+                                </button>
+                            </div>
+                        `;
+
+                        overviewFindingsBody.querySelectorAll(".jump-contrib-btn").forEach(btn => {
+                            btn.addEventListener("click", () => {
+                                switchTab("contributions-tab");
+                                if (issueTitle) issueTitle.value = decodeURIComponent(btn.dataset.title || "");
+                                if (issueDesc) issueDesc.value = decodeURIComponent(btn.dataset.desc || "");
+                                runContributionAnalysis();
+                            });
+                        });
+
+                        const viewAllBtn = document.getElementById("overview-view-all-findings");
+                        if (viewAllBtn) {
+                            viewAllBtn.addEventListener("click", () => {
+                                switchTab("contributions-tab");
+                                if (auditOpportunitiesContainer && auditReportCache) {
+                                    renderAuditReport(auditReportCache);
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("Background audit error:", err);
+        }
+    }
+
+    // =========================================================================
+    // PAGE 2: REPOSITORY TAB (IDE / CODE EXPLORER) LOGIC
+    // =========================================================================
     function renderFilesIndex(files) {
+        if (!treeContainer) return;
         if (!files || files.length === 0) {
             treeContainer.innerHTML = `<div class="empty-state"><p>No supported code files found.</p></div>`;
             return;
         }
 
         const sortedFiles = [...files].sort((a, b) => b.activity_score - a.activity_score);
-
         treeContainer.innerHTML = "";
+
         sortedFiles.forEach(file => {
             const node = document.createElement("div");
             node.className = "tree-node";
-            
-            const entryBadge = file.is_entry_point 
-                ? `<span class="badge badge-purple" style="font-size:10px; margin-left:4px;">🚀 Entry</span>` 
+            node.dataset.filename = file.relative_path.toLowerCase();
+
+            const entryBadge = file.is_entry_point
+                ? `<span class="badge badge-green" style="font-size:9px; margin-left:4px;">🚀 Entry</span>`
                 : "";
 
             node.innerHTML = `
                 <div class="node-info">
                     <i class="fa-regular fa-file-code"></i>
-                    <span>${file.relative_path}</span>
+                    <span>${escapeHtml(file.relative_path)}</span>
                     ${entryBadge}
                 </div>
-                <span class="node-meta">Score: ${file.activity_score}</span>
+                <span class="node-meta">${file.activity_score || 0}</span>
             `;
 
             node.addEventListener("click", () => {
@@ -219,98 +645,137 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Load File Content into Code Viewer
+    // Filter File Tree via Search Input
+    if (repoSearch) {
+        repoSearch.addEventListener("input", (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            const nodes = treeContainer.querySelectorAll(".tree-node");
+            nodes.forEach(node => {
+                const name = node.dataset.filename || "";
+                node.style.display = name.includes(query) ? "flex" : "none";
+            });
+        });
+    }
+
+    // Load Source Code Content
     async function loadFileContent(fullPath, relPath) {
         selectedFilePath = fullPath;
-        currentFilename.textContent = relPath;
-        codeContent.textContent = "Loading file content...";
-        summarizeBtn.disabled = true;
-        summaryText.innerHTML = `<p class="placeholder-text">Click <strong>"Summarize with Groq AI"</strong> to generate a summary for <code>${relPath}</code>.</p>`;
+        if (currentFilename) currentFilename.textContent = relPath;
+        if (codeContent) codeContent.textContent = "// Loading source code...";
+        if (summarizeBtn) summarizeBtn.disabled = true;
+        if (summaryText) {
+            summaryText.innerHTML = `<p class="placeholder-text" style="color: var(--text-muted);">Click <strong>"Summarize"</strong> to generate a developer architectural summary of <code>${escapeHtml(relPath)}</code>.</p>`;
+        }
+
+        // Highlight matching tree node
+        document.querySelectorAll(".tree-node").forEach(n => {
+            const text = n.querySelector(".node-info span")?.textContent;
+            if (text === relPath) n.classList.add("active");
+            else n.classList.remove("active");
+        });
+
+        // Populate Exported Symbols & Dependencies for this file
+        if (currentSession) {
+            const fileObj = currentSession.files.find(f => f.full_path === fullPath || f.relative_path === relPath);
+            if (fileObj) {
+                if (currentFileLines) currentFileLines.textContent = `${fileObj.line_count || 0} lines`;
+
+                if (fileSymbolsList) {
+                    if (fileObj.symbols && fileObj.symbols.length > 0) {
+                        fileSymbolsList.innerHTML = fileObj.symbols.map(s => `
+                            <span class="badge badge-purple" style="font-family: var(--font-mono); font-size: 11px;">
+                                ${s.kind === 'class' ? '🏛️' : '⚙️'} ${escapeHtml(s.name)}()
+                            </span>
+                        `).join("");
+                    } else {
+                        fileSymbolsList.innerHTML = `<span class="text-muted" style="font-size: 11px;">No top-level functions or classes detected.</span>`;
+                    }
+                }
+
+                if (fileDepsList) {
+                    if (fileObj.dependencies && fileObj.dependencies.length > 0) {
+                        fileDepsList.innerHTML = fileObj.dependencies.map(d => `
+                            <span class="badge" style="font-family: var(--font-mono); font-size: 11px;">
+                                ${escapeHtml(d.target_path)}
+                            </span>
+                        `).join("");
+                    } else {
+                        fileDepsList.innerHTML = `<span class="text-muted" style="font-size: 11px;">No imports declared.</span>`;
+                    }
+                }
+            }
+        }
 
         try {
             const res = await fetch(`/api/file-content?file_path=${encodeURIComponent(fullPath)}`);
             if (!res.ok) throw new Error("Failed to load file.");
             const data = await res.json();
 
-            codeContent.textContent = data.content;
-            Prism.highlightElement(codeContent);
-            summarizeBtn.disabled = false;
+            if (codeContent) {
+                codeContent.textContent = data.content;
+                if (window.Prism) Prism.highlightElement(codeContent);
+            }
+            if (currentFileLines) currentFileLines.textContent = `${data.lines || 0} lines`;
+            if (summarizeBtn) summarizeBtn.disabled = false;
         } catch (err) {
-            codeContent.textContent = `// Error loading file: ${err.message}`;
+            if (codeContent) codeContent.textContent = `// Error loading file: ${err.message}`;
         }
     }
 
-    // Trigger Groq AI Summarization
-    summarizeBtn.addEventListener("click", async () => {
-        if (!selectedFilePath) return;
-
-        summarizeBtn.disabled = true;
-        summarizeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Summarizing...`;
-        summaryText.innerHTML = `<p class="placeholder-text"><i class="fa-solid fa-spinner fa-spin"></i> Asking Groq AI to analyze file architecture...</p>`;
-
-        try {
-            const res = await fetch("/api/summarize", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    file_path: selectedFilePath,
-                    session_id: "default"
-                })
+    // Copy Code Button
+    if (copyCodeBtn) {
+        copyCodeBtn.addEventListener("click", () => {
+            if (!codeContent) return;
+            navigator.clipboard.writeText(codeContent.textContent).then(() => {
+                copyCodeBtn.innerHTML = `<i class="fa-solid fa-check" style="color: var(--color-success);"></i>`;
+                setTimeout(() => {
+                    copyCodeBtn.innerHTML = `<i class="fa-regular fa-copy"></i>`;
+                }, 1500);
             });
+        });
+    }
 
-            if (!res.ok) throw new Error("Summarization failed.");
-            const data = await res.json();
+    // Trigger Groq AI File Summarization
+    if (summarizeBtn) {
+        summarizeBtn.addEventListener("click", async () => {
+            if (!selectedFilePath) return;
+            summarizeBtn.disabled = true;
+            summarizeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing...`;
+            if (summaryText) {
+                summaryText.innerHTML = `<p class="placeholder-text"><i class="fa-solid fa-spinner fa-spin"></i> Asking Groq AI to analyze file architecture & purpose...</p>`;
+            }
 
-            summaryText.innerHTML = marked.parse(data.summary);
-            summarizeBtn.disabled = false;
-            summarizeBtn.innerHTML = `<i class="fa-solid fa-bolt"></i> Summarize with Groq AI`;
+            try {
+                const res = await fetch("/api/summarize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        file_path: selectedFilePath,
+                        session_id: "default"
+                    })
+                });
 
-        } catch (err) {
-            summaryText.innerHTML = `<p style="color: var(--accent-rose);">❌ ${err.message}</p>`;
-            summarizeBtn.disabled = false;
-            summarizeBtn.innerHTML = `<i class="fa-solid fa-bolt"></i> Summarize with Groq AI`;
-        }
-    });
+                if (!res.ok) throw new Error("Summarization failed.");
+                const data = await res.json();
+                if (summaryText) summaryText.innerHTML = marked.parse(data.summary);
+            } catch (err) {
+                if (summaryText) summaryText.innerHTML = `<p style="color: var(--color-danger);">❌ ${err.message}</p>`;
+            } finally {
+                summarizeBtn.disabled = false;
+                summarizeBtn.innerHTML = `<i class="fa-solid fa-bolt"></i> Summarize`;
+            }
+        });
+    }
 
-    // Generate Onboarding Guide
-    generateGuideBtn.addEventListener("click", async () => {
-        if (!currentSession) {
-            alert("Please analyze a repository first.");
-            return;
-        }
-
-        generateGuideBtn.disabled = true;
-        generateGuideBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating Onboarding Guide...`;
-        guideContent.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Groq AI is building your Onboarding Guide...</h3></div>`;
-
-        try {
-            const res = await fetch("/api/generate-guide", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ session_id: "default" })
-            });
-
-            if (!res.ok) throw new Error("Guide generation failed.");
-            const data = await res.json();
-
-            guideContent.innerHTML = marked.parse(data.guide);
-            generateGuideBtn.disabled = false;
-            generateGuideBtn.innerHTML = `<i class="fa-solid fa-sparkles"></i> Regenerate Guide`;
-
-        } catch (err) {
-            guideContent.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">❌ ${err.message}</p></div>`;
-            generateGuideBtn.disabled = false;
-            generateGuideBtn.innerHTML = `<i class="fa-solid fa-sparkles"></i> Generate Guide with Groq`;
-        }
-    });
-
-    // Render Dependency Graph (Vis Network)
+    // =========================================================================
+    // PAGE 3: ARCHITECTURE (DEPENDENCY GRAPH) LOGIC
+    // =========================================================================
     async function renderDependencyGraph() {
         const container = document.getElementById("network-graph");
         if (!container) return;
 
         if (typeof vis === 'undefined') {
-            container.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);"><i class="fa-solid fa-triangle-exclamation"></i> Vis.js library could not be loaded. Please check network connection.</p></div>`;
+            container.innerHTML = `<div class="empty-state"><p style="color: var(--color-danger);">Vis.js library could not be loaded.</p></div>`;
             return;
         }
 
@@ -319,9 +784,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const includeExt = graphExternalChk ? graphExternalChk.checked : true;
 
         try {
-            // Show loading placeholder if canvas is not yet initialized
             if (!container.querySelector("canvas")) {
-                container.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Loading dependency network (${filterType})...</p></div>`;
+                container.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Building 2D dependency graph (${filterType})...</p></div>`;
             }
 
             const res = await fetch(`/api/graph?session_id=default&filter_type=${filterType}&include_external=${includeExt}`);
@@ -332,37 +796,51 @@ document.addEventListener("DOMContentLoaded", () => {
                     networkGraph.destroy();
                     networkGraph = null;
                 }
-                container.innerHTML = `<div class="empty-state"><p>No dependency nodes found for filter: <strong>${filterType}</strong></p><p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Try switching to <em>All Files & Modules</em> or click Reset View.</p></div>`;
+                container.innerHTML = `<div class="empty-state"><p>No dependency nodes found for filter: <strong>${escapeHtml(filterType)}</strong></p><p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Switch filter to All Files or reset camera.</p></div>`;
                 return;
             }
 
-            // Clear container
             container.innerHTML = "";
 
+            // Modern Linear/GitHub light styling for Vis.js nodes
             const nodesDataSet = new vis.DataSet(data.nodes.map(n => {
-                const baseSize = 15;
-                const sizeBonus = Math.min(26, (n.in_degree || 0) * 4);
+                const baseSize = 14;
+                const sizeBonus = Math.min(22, (n.in_degree || 0) * 3);
                 const finalSize = baseSize + sizeBonus;
 
-                let nodeColor = '#06b6d4'; // default cyan
-                if (n.language === 'python') nodeColor = '#6366f1';
-                else if (n.language === 'javascript' || n.language === 'typescript') nodeColor = '#f59e0b';
-                else if (n.node_type === 'external_package') nodeColor = '#8b5cf6';
-                if (n.is_entry_point) nodeColor = '#10b981';
-                if (n.is_circular) nodeColor = '#f43f5e';
+                let nodeBg = '#ffffff';
+                let nodeBorder = '#2563eb';
+                let shape = 'dot';
+
+                if (n.node_type === 'external_package') {
+                    nodeBorder = '#7c3aed';
+                    nodeBg = '#f5f3ff';
+                    shape = 'box';
+                } else if (n.is_entry_point) {
+                    nodeBorder = '#059669';
+                    nodeBg = '#ecfdf5';
+                    shape = 'diamond';
+                } else if (n.is_circular) {
+                    nodeBorder = '#dc2626';
+                    nodeBg = '#fef2f2';
+                } else {
+                    nodeBorder = '#2563eb';
+                    nodeBg = '#eff6ff';
+                }
 
                 return {
                     id: String(n.id),
                     label: n.label,
-                    title: n.title,
-                    shape: n.node_type === 'external_package' ? 'box' : (n.is_entry_point ? 'diamond' : 'dot'),
+                    title: `${n.label}\nIn-Degree: ${n.in_degree || 0} | Out-Degree: ${n.out_degree || 0}\nCategory: ${n.module_category || 'standard'}`,
+                    shape: shape,
                     size: finalSize,
                     color: {
-                        background: nodeColor,
-                        border: n.is_circular ? '#f43f5e' : '#ffffff',
-                        highlight: { background: '#8b5cf6', border: '#ffffff' }
+                        background: nodeBg,
+                        border: nodeBorder,
+                        highlight: { background: '#dbeafe', border: '#1d4ed8' }
                     },
-                    font: { color: '#f8fafc', face: 'Inter', size: 12 },
+                    borderWidth: 2,
+                    font: { color: '#0f172a', face: 'Inter', size: 11 },
                     rawData: n
                 };
             }));
@@ -371,13 +849,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 from: String(e.from),
                 to: String(e.to),
                 arrows: 'to',
-                color: { color: e.edge_type === 'external_package' ? 'rgba(139,92,246,0.35)' : 'rgba(99,102,241,0.45)' },
+                color: { color: e.edge_type === 'external_package' ? '#c4b5fd' : '#94a3b8', highlight: '#2563eb' },
                 width: 1.2
             })));
 
-            const graphData = { nodes: nodesDataSet, edges: edgesDataSet };
             const isTree = layoutType === 'tree';
-
             const options = {
                 autoResize: true,
                 layout: isTree ? {
@@ -385,46 +861,31 @@ document.addEventListener("DOMContentLoaded", () => {
                         enabled: true,
                         direction: 'UD',
                         sortMethod: 'hubsize',
-                        levelSeparation: 130,
-                        nodeSpacing: 160,
-                        treeSpacing: 220,
-                        blockShifting: true,
-                        edgeMinimization: true,
-                        parentCentralization: true
+                        levelSeparation: 120,
+                        nodeSpacing: 140
                     }
                 } : {
                     hierarchical: { enabled: false }
                 },
                 physics: isTree ? {
                     enabled: true,
-                    solver: 'hierarchicalRepulsion',
-                    hierarchicalRepulsion: {
-                        nodeDistance: 150,
-                        centralGravity: 0.0,
-                        springLength: 110,
-                        springConstant: 0.01,
-                        damping: 0.09
-                    },
-                    stabilization: { iterations: 120, updateInterval: 25 }
+                    solver: 'hierarchicalRepulsion'
                 } : {
                     enabled: true,
                     solver: 'forceAtlas2Based',
                     forceAtlas2Based: {
                         gravitationalConstant: -35,
                         centralGravity: 0.01,
-                        springLength: 110,
+                        springLength: 100,
                         springConstant: 0.08,
-                        damping: 0.4,
-                        avoidOverlap: 0.6
+                        damping: 0.4
                     },
-                    stabilization: { iterations: 140, updateInterval: 25 }
+                    stabilization: { iterations: 120, updateInterval: 25 }
                 },
                 interaction: {
                     hover: true,
-                    tooltipDelay: 100,
                     zoomView: true,
-                    dragView: true,
-                    navigationButtons: true
+                    dragView: true
                 }
             };
 
@@ -432,23 +893,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 networkGraph.destroy();
                 networkGraph = null;
             }
-            networkGraph = new vis.Network(container, graphData, options);
+            networkGraph = new vis.Network(container, { nodes: nodesDataSet, edges: edgesDataSet }, options);
 
-            // Fit graph view once stabilized
             networkGraph.once("stabilizationIterationsDone", () => {
-                networkGraph.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+                networkGraph.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
             });
 
-            // Fallback fit in case stabilization finishes instantly
-            setTimeout(() => {
-                if (networkGraph) {
-                    networkGraph.setSize('100%', '100%');
-                    networkGraph.redraw();
-                    networkGraph.fit();
-                }
-            }, 300);
-
-            // Handle Node Select / Click
             networkGraph.on("selectNode", (params) => {
                 if (params.nodes.length > 0) {
                     const selectedId = params.nodes[0];
@@ -459,45 +909,38 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
 
-            networkGraph.on("deselectNode", () => {
-                closeNodeInspector();
-            });
+            networkGraph.on("deselectNode", closeNodeInspector);
 
         } catch (err) {
-            container.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);"><i class="fa-solid fa-triangle-exclamation"></i> Graph error: ${err.message}</p></div>`;
+            container.innerHTML = `<div class="empty-state"><p style="color: var(--color-danger);">Graph error: ${escapeHtml(err.message)}</p></div>`;
         }
     }
 
-    // Open Node Inspector Side Drawer
     function openNodeInspector(nodeData) {
         currentInspectorNode = nodeData;
-        inspectorNodeTitle.textContent = nodeData.label;
-        inspectorNodeType.textContent = nodeData.node_type === 'external_package' ? 'External Package' : (nodeData.is_entry_point ? '🚀 Entry Point' : 'Source File');
-        
-        inspectorInDegree.textContent = nodeData.in_degree || 0;
-        inspectorOutDegree.textContent = nodeData.out_degree || 0;
-        inspectorScore.textContent = nodeData.activity_score || 0.0;
+        if (!nodeInspector) return;
 
-        // Populate connected deps if session is active
+        if (inspectorNodeTitle) inspectorNodeTitle.textContent = nodeData.label;
+        if (inspectorNodeType) {
+            inspectorNodeType.textContent = nodeData.node_type === 'external_package' ? 'External Package' : (nodeData.is_entry_point ? '🚀 Entry Point' : 'Internal File');
+        }
+        if (inspectorInDegree) inspectorInDegree.textContent = nodeData.in_degree || 0;
+        if (inspectorOutDegree) inspectorOutDegree.textContent = nodeData.out_degree || 0;
+        if (inspectorScore) inspectorScore.textContent = nodeData.activity_score || 0.0;
+
         if (currentSession) {
             const fileObj = currentSession.files.find(f => f.relative_path === nodeData.path);
             if (fileObj) {
-                // Dependencies list
-                if (fileObj.dependencies && fileObj.dependencies.length > 0) {
-                    inspectorDepsList.innerHTML = fileObj.dependencies.map(d => `<span class="badge">${d.target_path}</span>`).join("");
-                } else {
-                    inspectorDepsList.innerHTML = `<span class="text-muted" style="font-size:12px;">No dependencies declared.</span>`;
+                if (inspectorDepsList) {
+                    inspectorDepsList.innerHTML = (fileObj.dependencies && fileObj.dependencies.length > 0)
+                        ? fileObj.dependencies.map(d => `<span class="badge">${escapeHtml(d.target_path)}</span>`).join("")
+                        : `<span class="text-muted" style="font-size:11px;">No dependencies declared.</span>`;
                 }
-
-                // Symbols list
-                if (fileObj.symbols && fileObj.symbols.length > 0) {
-                    inspectorSymbolsList.innerHTML = fileObj.symbols.map(s => `<span class="badge badge-purple">⚙️ ${s.name}()</span>`).join("");
-                } else {
-                    inspectorSymbolsList.innerHTML = `<span class="text-muted" style="font-size:12px;">No exported functions found.</span>`;
+                if (inspectorSymbolsList) {
+                    inspectorSymbolsList.innerHTML = (fileObj.symbols && fileObj.symbols.length > 0)
+                        ? fileObj.symbols.map(s => `<span class="badge badge-purple">⚙️ ${escapeHtml(s.name)}()</span>`).join("")
+                        : `<span class="text-muted" style="font-size:11px;">No exported functions.</span>`;
                 }
-            } else {
-                inspectorDepsList.innerHTML = `<span class="text-muted" style="font-size:12px;">External third-party module.</span>`;
-                inspectorSymbolsList.innerHTML = `<span class="text-muted" style="font-size:12px;">External package.</span>`;
             }
         }
 
@@ -505,35 +948,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function closeNodeInspector() {
-        nodeInspector.classList.add("hidden");
+        if (nodeInspector) nodeInspector.classList.add("hidden");
         currentInspectorNode = null;
     }
 
-    if (closeInspectorBtn) {
-        closeInspectorBtn.addEventListener("click", closeNodeInspector);
-    }
+    if (closeInspectorBtn) closeInspectorBtn.addEventListener("click", closeNodeInspector);
 
-    // Jump to Code button handler
     if (jumpCodeBtn) {
         jumpCodeBtn.addEventListener("click", () => {
             if (!currentInspectorNode || currentInspectorNode.node_type === 'external_package') {
-                alert("Cannot view source code for external packages.");
+                alert("Cannot open source code for external packages.");
                 return;
             }
-
-            // Find matching file in tree
-            const targetRelPath = currentInspectorNode.path;
-            const fileObj = currentSession ? currentSession.files.find(f => f.relative_path === targetRelPath) : null;
-            
-            if (fileObj) {
-                // Switch to Code Explorer tab
-                document.querySelector('.tab-btn[data-tab="explorer-tab"]').click();
-                loadFileContent(fileObj.full_path, fileObj.relative_path);
+            const match = currentSession?.files.find(f => f.relative_path === currentInspectorNode.path);
+            if (match) {
+                switchTab("repository-tab");
+                loadFileContent(match.full_path, match.relative_path);
             }
         });
     }
 
-    // Toolbar Event Listeners
     if (refreshGraphBtn) {
         refreshGraphBtn.addEventListener("click", () => {
             if (graphFilterSelect) graphFilterSelect.value = "all";
@@ -546,44 +980,339 @@ document.addEventListener("DOMContentLoaded", () => {
     if (graphLayoutSelect) graphLayoutSelect.addEventListener("change", renderDependencyGraph);
     if (graphExternalChk) graphExternalChk.addEventListener("change", renderDependencyGraph);
 
-    // AI Chat Assistant
-    chatForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const question = chatInput.value.trim();
-        if (!question) return;
-
-        appendMessage("user", question);
-        chatInput.value = "";
-
-        const assistantMsgEl = appendMessage("assistant", `<i class="fa-solid fa-spinner fa-spin"></i> Thinking...`);
-
-        try {
-            const res = await fetch("/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ question: question, session_id: "default" })
-            });
-
-            if (!res.ok) throw new Error("Chat request failed.");
-            const data = await res.json();
-
-            assistantMsgEl.querySelector(".msg-bubble").innerHTML = marked.parse(data.answer);
-
-        } catch (err) {
-            assistantMsgEl.querySelector(".msg-bubble").innerHTML = `<span style="color: var(--accent-rose);">❌ ${err.message}</span>`;
+    function populateArchitectureTables(repoIndex) {
+        // Populate Modules Breakdown Table
+        if (archModulesTbody) {
+            const files = repoIndex.files || [];
+            if (files.length === 0) {
+                archModulesTbody.innerHTML = `<tr><td colspan="5" class="empty-state">No modules indexed.</td></tr>`;
+            } else {
+                archModulesTbody.innerHTML = files.map(f => `
+                    <tr>
+                        <td>
+                            <strong style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(f.relative_path)}</strong>
+                            ${f.is_entry_point ? '<span class="badge badge-green" style="font-size: 9px; margin-left: 4px;">Entry</span>' : ''}
+                        </td>
+                        <td><span class="badge" style="text-transform: capitalize;">${escapeHtml(f.module_category || 'standard')}</span></td>
+                        <td><span class="badge badge-blue">${f.in_degree || 0}</span></td>
+                        <td><span class="badge">${f.out_degree || 0}</span></td>
+                        <td>${f.is_circular ? '<span class="badge badge-red">Circular</span>' : '<span class="text-muted" style="font-size:11px;">No</span>'}</td>
+                    </tr>
+                `).join("");
+            }
         }
-    });
 
-    function appendMessage(role, text) {
+        // Populate Circular Cycles List
+        if (archCyclesList) {
+            const cycles = repoIndex.circular_cycles || [];
+            if (archCyclesCount) archCyclesCount.textContent = `${cycles.length} Cycles`;
+
+            if (cycles.length === 0) {
+                archCyclesList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
+                        <h3>No Circular Dependencies Detected</h3>
+                        <p>The codebase exhibits clean acyclic module hierarchy.</p>
+                    </div>
+                `;
+            } else {
+                archCyclesList.innerHTML = cycles.map((c, i) => `
+                    <div style="padding: 10px; background: var(--bg-subtle); border-radius: var(--radius-sm); margin-bottom: 8px; border-left: 3px solid var(--color-danger);">
+                        <strong style="font-size: 12px; color: var(--color-danger);">Cycle #${i + 1} (${c.cycle_length} files)</strong>
+                        <div style="font-family: var(--font-mono); font-size: 11px; margin-top: 4px; color: var(--text-primary);">
+                            ${(c.cycle_path || []).map(p => escapeHtml(p)).join(' <i class="fa-solid fa-arrow-right" style="font-size: 9px; color: var(--text-muted);"></i> ')}
+                        </div>
+                    </div>
+                `).join("");
+            }
+        }
+    }
+
+    // =========================================================================
+    // PAGE 4: AI ASSISTANT LOGIC (WITH CITATIONS BESIDE / BELOW RESPONSES)
+    // =========================================================================
+    if (chatForm) {
+        chatForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const question = chatInput ? chatInput.value.trim() : "";
+            if (!question) return;
+
+            appendChatMessage("user", question);
+            if (chatInput) chatInput.value = "";
+
+            const assistantMsgEl = appendChatMessage("assistant", `<i class="fa-solid fa-spinner fa-spin"></i> Thinking & retrieving repository context...`);
+
+            try {
+                const res = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ question: question, session_id: "default" })
+                });
+
+                if (!res.ok) throw new Error("Chat request failed.");
+                const data = await res.json();
+
+                const bubble = assistantMsgEl.querySelector(".message-bubble");
+                bubble.innerHTML = marked.parse(data.answer);
+
+                // Render Grounded Source Citations
+                if (data.sources && data.sources.length > 0) {
+                    const citationContainer = document.createElement("div");
+                    citationContainer.className = "citation-container";
+                    citationContainer.innerHTML = `<span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Grounded Sources:</span>`;
+
+                    data.sources.forEach(src => {
+                        const chip = document.createElement("button");
+                        chip.type = "button";
+                        chip.className = "citation-chip";
+                        const sym = src.symbol_name ? `::${src.symbol_name}` : "";
+                        const line = src.line_number ? `:${src.line_number}` : "";
+                        chip.innerHTML = `<i class="fa-regular fa-file-code"></i> ${escapeHtml(src.file_path + sym + line)}`;
+                        chip.title = src.relevance_reason || "Source citation";
+
+                        chip.addEventListener("click", () => {
+                            if (currentSession) {
+                                const match = currentSession.files.find(f => f.relative_path === src.file_path);
+                                if (match) {
+                                    switchTab("repository-tab");
+                                    loadFileContent(match.full_path, match.relative_path);
+                                }
+                            }
+                        });
+
+                        citationContainer.appendChild(chip);
+                    });
+
+                    bubble.appendChild(citationContainer);
+                }
+
+            } catch (err) {
+                const bubble = assistantMsgEl.querySelector(".message-bubble");
+                bubble.innerHTML = `<span style="color: var(--color-danger);">❌ ${escapeHtml(err.message)}</span>`;
+            }
+        });
+    }
+
+    function appendChatMessage(role, textHtml) {
         const msgDiv = document.createElement("div");
-        msgDiv.className = `message ${role}`;
-        msgDiv.innerHTML = `<div class="msg-bubble">${text}</div>`;
-        chatMessages.appendChild(msgDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        msgDiv.className = `chat-message ${role}`;
+
+        const avatarIcon = role === "user" ? '<i class="fa-solid fa-user"></i>' : '<i class="fa-solid fa-robot"></i>';
+        msgDiv.innerHTML = `
+            <div class="message-avatar">${avatarIcon}</div>
+            <div class="message-bubble">${textHtml}</div>
+        `;
+
+        if (chatMessages) {
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
         return msgDiv;
     }
 
-    // Agentic Repository Explorer
+    // Prompt Chips Handler
+    document.querySelectorAll(".prompt-chip").forEach(chip => {
+        chip.addEventListener("click", () => {
+            if (chatInput) {
+                chatInput.value = chip.dataset.prompt || "";
+                chatForm.dispatchEvent(new Event("submit"));
+            }
+        });
+    });
+
+    // Clear History Button
+    if (clearChatBtn) {
+        clearChatBtn.addEventListener("click", async () => {
+            try {
+                await fetch("/api/chat/history?session_id=default", { method: "DELETE" });
+                if (chatMessages) {
+                    chatMessages.innerHTML = `
+                        <div class="chat-message assistant">
+                            <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
+                            <div class="message-bubble">
+                                Conversation history cleared. What would you like to explore next?
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (err) {
+                console.warn("Clear chat error:", err);
+            }
+        });
+    }
+
+    // =========================================================================
+    // PAGE 5: CONTRIBUTIONS TAB LOGIC
+    // =========================================================================
+    if (auditRepoBtn) {
+        auditRepoBtn.addEventListener("click", async () => {
+            auditRepoBtn.disabled = true;
+            auditRepoBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Auditing AST & Security...`;
+            if (auditOpportunitiesContainer) {
+                auditOpportunitiesContainer.style.display = "block";
+                auditOpportunitiesContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Scanning repository AST for security risks, test coverage gaps & refactoring opportunities...</p></div>`;
+            }
+
+            try {
+                const res = await fetch("/api/contribution/audit", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: "default" })
+                });
+
+                if (!res.ok) throw new Error("Audit scanning failed.");
+                const auditData = await res.json();
+                auditReportCache = auditData;
+                renderAuditReport(auditData);
+            } catch (err) {
+                if (auditOpportunitiesContainer) {
+                    auditOpportunitiesContainer.innerHTML = `<div class="empty-state"><p style="color: var(--color-danger);">❌ ${err.message}</p></div>`;
+                }
+            } finally {
+                auditRepoBtn.disabled = false;
+                auditRepoBtn.innerHTML = `<i class="fa-solid fa-shield-halved"></i> Run Full Audit`;
+            }
+        });
+    }
+
+    function renderAuditReport(auditReport) {
+        if (!auditOpportunitiesContainer) return;
+        if (!auditReport.opportunities || auditReport.opportunities.length === 0) {
+            auditOpportunitiesContainer.innerHTML = `
+                <div class="dev-card">
+                    <div class="empty-state">
+                        <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
+                        <h3>Excellent Repository Health!</h3>
+                        <p>No critical security vulnerabilities, test gaps, or circular dependency risks detected.</p>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        let html = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px;">`;
+
+        auditReport.opportunities.forEach(opp => {
+            let severityClass = "badge-blue";
+            if (opp.severity === "Critical") severityClass = "badge-red";
+            else if (opp.severity === "High") severityClass = "badge-amber";
+            else if (opp.severity === "Medium") severityClass = "badge-amber";
+
+            const filesHtml = (opp.target_files || []).map(f => `<span class="badge" style="font-size: 10px; font-family: var(--font-mono);">${escapeHtml(f)}</span>`).join(" ");
+
+            html += `
+                <div class="opportunity-card" data-severity="${opp.severity.toLowerCase()}">
+                    <div class="opportunity-card-top">
+                        <span class="badge ${severityClass}">${escapeHtml(opp.severity)}</span>
+                        <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">${escapeHtml(opp.category.replace('_', ' '))}</span>
+                    </div>
+                    <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">${escapeHtml(opp.title)}</h4>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">${escapeHtml(opp.description)}</p>
+                    <div style="margin-bottom: 12px;">${filesHtml}</div>
+                    <button type="button" class="btn btn-secondary btn-sm select-opp-btn" data-title="${encodeURIComponent(opp.suggested_issue_title)}" data-desc="${encodeURIComponent(opp.suggested_issue_desc)}" style="width: 100%;">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze & Plan Issue
+                    </button>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+        auditOpportunitiesContainer.innerHTML = html;
+
+        auditOpportunitiesContainer.querySelectorAll(".select-opp-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const title = decodeURIComponent(btn.dataset.title || "");
+                const desc = decodeURIComponent(btn.dataset.desc || "");
+                if (issueTitle) issueTitle.value = title;
+                if (issueDesc) issueDesc.value = desc;
+                runContributionAnalysis();
+            });
+        });
+    }
+
+    // Filter Chips for Opportunities
+    document.querySelectorAll(".filter-chip").forEach(chip => {
+        chip.addEventListener("click", () => {
+            document.querySelectorAll(".filter-chip").forEach(c => c.classList.remove("active"));
+            chip.classList.add("active");
+            const filter = chip.dataset.filter;
+
+            const cards = auditOpportunitiesContainer?.querySelectorAll(".opportunity-card");
+            cards?.forEach(card => {
+                if (filter === "all" || card.dataset.severity === filter) {
+                    card.style.display = "block";
+                } else {
+                    card.style.display = "none";
+                }
+            });
+        });
+    });
+
+    async function runContributionAnalysis() {
+        const title = issueTitle ? issueTitle.value.trim() : "";
+        const desc = issueDesc ? issueDesc.value.trim() : "";
+        if (!title) return;
+
+        if (analyzeContribBtn) {
+            analyzeContribBtn.disabled = true;
+            analyzeContribBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Calculating Blast Radius...`;
+        }
+        if (contributionContent) {
+            contributionContent.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Analyzing architectural blast radius and generating implementation plan...</p></div>`;
+        }
+
+        try {
+            const res = await fetch("/api/contribution/analyze", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title: title,
+                    description: desc,
+                    session_id: "default"
+                })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || "Analysis failed.");
+            }
+
+            const data = await res.json();
+            if (contributionContent) {
+                contributionContent.innerHTML = `
+                    <div class="dev-card-body markdown-body">
+                        ${marked.parse(data.plan_narrative)}
+                    </div>
+                `;
+            }
+        } catch (err) {
+            if (contributionContent) {
+                contributionContent.innerHTML = `<div class="empty-state"><p style="color: var(--color-danger);">❌ ${escapeHtml(err.message)}</p></div>`;
+            }
+        } finally {
+            if (analyzeContribBtn) {
+                analyzeContribBtn.disabled = false;
+                analyzeContribBtn.innerHTML = `<i class="fa-solid fa-bullseye"></i> Analyze Contribution & Blast Radius`;
+            }
+        }
+    }
+
+    // Preset Issue Buttons
+    document.querySelectorAll(".preset-issue-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            if (issueTitle) issueTitle.value = btn.dataset.title || "";
+            if (issueDesc) issueDesc.value = btn.dataset.desc || "";
+            runContributionAnalysis();
+        });
+    });
+
+    if (contribForm) {
+        contribForm.addEventListener("submit", runContributionAnalysis);
+    }
+
+    // =========================================================================
+    // PAGE 6: AGENT EXPLORER LOGIC
+    // =========================================================================
     if (agentForm) {
         agentForm.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -592,35 +1321,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (agentExploreBtn) {
                 agentExploreBtn.disabled = true;
-                agentExploreBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Exploring...`;
+                agentExploreBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Investigating...`;
             }
             if (agentTrace) {
-                agentTrace.innerHTML = `<div class="trace-item running"><i class="fa-solid fa-spinner fa-spin"></i><span>Starting read-only repository investigation...</span></div>`;
+                agentTrace.innerHTML = `<div class="trace-step-item"><i class="fa-solid fa-spinner fa-spin" style="color: var(--accent-primary);"></i><span>Starting autonomous investigation trace...</span></div>`;
             }
             if (agentAnswer) {
-                agentAnswer.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Collecting repository evidence...</h3></div>`;
+                agentAnswer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Collecting evidence across codebase AST...</p></div>`;
             }
             if (agentFiles) agentFiles.innerHTML = "";
             if (agentSources) agentSources.innerHTML = "";
             if (agentSummary) agentSummary.innerHTML = "";
 
             try {
-                if (!currentSession) {
-                    const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
-                    const cloneRes = await fetch("/api/clone", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
-                    });
-                    if (!cloneRes.ok) {
-                        const err = await cloneRes.json();
-                        throw new Error(err.detail || "Repository indexing failed.");
-                    }
-                    currentSession = await cloneRes.json();
-                    if (fileCount) fileCount.textContent = `${currentSession.total_files} files (${currentSession.total_lines} lines)`;
-                    renderFilesIndex(currentSession.files);
-                }
-
                 const res = await fetch("/api/agent/explore", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -642,15 +1355,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 renderAgentResult(data);
             } catch (err) {
                 if (agentTrace) {
-                    agentTrace.innerHTML = `<div class="trace-item error"><i class="fa-solid fa-triangle-exclamation"></i><span>${escapeHtml(err.message)}</span></div>`;
+                    agentTrace.innerHTML = `<div class="trace-step-item" style="border-color: var(--color-danger);"><i class="fa-solid fa-triangle-exclamation" style="color: var(--color-danger);"></i><span>${escapeHtml(err.message)}</span></div>`;
                 }
                 if (agentAnswer) {
-                    agentAnswer.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">Error: ${escapeHtml(err.message)}</p></div>`;
+                    agentAnswer.innerHTML = `<div class="empty-state"><p style="color: var(--color-danger);">Error: ${escapeHtml(err.message)}</p></div>`;
                 }
             } finally {
                 if (agentExploreBtn) {
                     agentExploreBtn.disabled = false;
-                    agentExploreBtn.innerHTML = `<i class="fa-solid fa-magnifying-glass-location"></i> Explore Repository`;
+                    agentExploreBtn.innerHTML = `<i class="fa-solid fa-route"></i> Explore Codebase`;
                 }
             }
         });
@@ -658,278 +1371,72 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function renderAgentResult(data) {
         if (agentTrace) {
-            agentTrace.innerHTML = (data.trace || []).map(event => {
-                const icon = event.status === "success" || event.status === "complete" ? "fa-check" :
-                    event.status === "error" ? "fa-triangle-exclamation" :
-                    event.status === "running" ? "fa-spinner fa-spin" : "fa-circle";
+            const steps = data.trace || [];
+            if (agentStepCount) agentStepCount.textContent = `${steps.length} Steps`;
+
+            agentTrace.innerHTML = steps.map(event => {
+                const icon = (event.status === "success" || event.status === "complete")
+                    ? '<i class="fa-solid fa-check" style="color: var(--color-success);"></i>'
+                    : event.status === "error"
+                    ? '<i class="fa-solid fa-triangle-exclamation" style="color: var(--color-danger);"></i>'
+                    : '<i class="fa-solid fa-circle-dot" style="color: var(--accent-primary);"></i>';
+
                 return `
-                    <div class="trace-item ${event.status}">
-                        <i class="fa-solid ${icon}"></i>
-                        <span>${escapeHtml(event.description)}</span>
-                        ${event.tool ? `<code>${escapeHtml(event.tool)}</code>` : ""}
+                    <div class="trace-step-item">
+                        <span class="trace-step-num">${event.step || 1}</span>
+                        <div style="flex: 1;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span>${icon} ${escapeHtml(event.description)}</span>
+                                ${event.tool ? `<span class="badge" style="font-family:var(--font-mono); font-size:10px;">${escapeHtml(event.tool)}</span>` : ''}
+                            </div>
+                        </div>
                     </div>
                 `;
             }).join("");
         }
 
         if (agentAnswer) {
-            agentAnswer.innerHTML = `<h3>Answer</h3>${marked.parse(data.answer || "No answer generated.")}`;
+            agentAnswer.innerHTML = `
+                <h3 style="font-size: 14px; margin-bottom: 8px;">Final Grounded Answer</h3>
+                ${marked.parse(data.answer || "No answer generated.")}
+            `;
         }
 
         if (agentFiles) {
+            const files = data.files_inspected || [];
             agentFiles.innerHTML = `
-                <h3>Relevant Files</h3>
-                <div class="agent-chip-list">${(data.files_inspected || []).map(path => `<span class="badge">${escapeHtml(path)}</span>`).join("") || `<span class="text-muted">No files inspected.</span>`}</div>
+                <h4 style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">Files Inspected (${files.length})</h4>
+                <div class="tag-cloud">
+                    ${files.map(path => `<span class="badge" style="font-family: var(--font-mono);">${escapeHtml(path)}</span>`).join("") || '<span class="text-muted">None</span>'}
+                </div>
             `;
         }
 
         if (agentSources) {
+            const sources = data.sources || [];
             agentSources.innerHTML = `
-                <h3>Sources</h3>
-                <div class="agent-source-list">
-                    ${(data.sources || []).map(src => {
-                        const symbol = src.symbol_name ? `::${src.symbol_name}` : "";
+                <h4 style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">Source Evidence</h4>
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    ${sources.map(src => {
+                        const sym = src.symbol_name ? `::${src.symbol_name}` : "";
                         const line = src.line_number ? `:${src.line_number}` : "";
-                        return `<div class="agent-source"><code>${escapeHtml(src.file_path + symbol + line)}</code><span>${escapeHtml(src.relevance_reason || "")}</span></div>`;
-                    }).join("") || `<span class="text-muted">No source attributions collected.</span>`}
+                        return `
+                            <div style="padding: 6px 10px; background: var(--bg-subtle); border-radius: var(--radius-sm); font-size: 11px;">
+                                <strong style="font-family: var(--font-mono); color: var(--accent-primary);">${escapeHtml(src.file_path + sym + line)}</strong>
+                                <div style="color: var(--text-secondary); margin-top: 2px;">${escapeHtml(src.relevance_reason || "")}</div>
+                            </div>
+                        `;
+                    }).join("") || '<span class="text-muted">None</span>'}
                 </div>
             `;
         }
-
-        if (agentSummary) {
-            const meta = data.metadata || {};
-            agentSummary.innerHTML = `
-                <h3>Investigation Summary</h3>
-                <p class="text-muted">Iterations: ${data.iterations || 0} | Tool calls: ${meta.tool_calls || 0} | Tools: ${(data.tools_used || []).join(", ") || "none"}</p>
-            `;
-        }
     }
 
-    function escapeHtml(value) {
-        return String(value || "")
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
-    // Contribution Intelligence Runner & Preset Handlers
-    async function runContributionAnalysis(e) {
-        if (e && e.preventDefault) e.preventDefault();
-        const title = issueTitle ? issueTitle.value.trim() : "";
-        const desc = issueDesc ? issueDesc.value.trim() : "";
-        if (!title) return false;
-
-        if (analyzeContribBtn) {
-            analyzeContribBtn.disabled = true;
-            analyzeContribBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing Issue & Impact...`;
-        }
-        if (contributionContent) {
-            contributionContent.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Mapping issue requirements to repository files and graph impact...</h3></div>`;
-        }
-
-        try {
-            async function callAnalyzeApi() {
-                return await fetch("/api/contribution/analyze", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        title: title,
-                        description: desc,
-                        session_id: "default"
-                    })
-                });
-            }
-
-            if (!currentSession) {
-                const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
-                const cloneRes = await fetch("/api/clone", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
-                });
-                if (!cloneRes.ok) {
-                    const err = await cloneRes.json();
-                    throw new Error(err.detail || "Repository indexing failed.");
-                }
-                currentSession = await cloneRes.json();
-                if (fileCount) fileCount.textContent = `${currentSession.total_files} files (${currentSession.total_lines} lines)`;
-                if (typeof renderFilesIndex === "function") renderFilesIndex(currentSession.files);
-            }
-
-            let res = await callAnalyzeApi();
-
-            if (res.status === 404) {
-                const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
-                const cloneRes = await fetch("/api/clone", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
-                });
-                if (cloneRes.ok) {
-                    currentSession = await cloneRes.json();
-                    if (fileCount) fileCount.textContent = `${currentSession.total_files} files (${currentSession.total_lines} lines)`;
-                    if (typeof renderFilesIndex === "function") renderFilesIndex(currentSession.files);
-                    res = await callAnalyzeApi();
-                }
-            }
-
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.detail || "Contribution analysis failed.");
-            }
-
-            const data = await res.json();
-
-            if (contributionContent) {
-                const formattedHtml = typeof marked !== "undefined" && marked.parse ? marked.parse(data.plan_narrative) : data.plan_narrative;
-                contributionContent.innerHTML = formattedHtml;
-            }
-        } catch (err) {
-            if (contributionContent) {
-                contributionContent.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">❌ ${err.message}</p></div>`;
-            }
-        } finally {
-            if (analyzeContribBtn) {
-                analyzeContribBtn.disabled = false;
-                analyzeContribBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution`;
-            }
-        }
-        return false;
-    }
-
-    // Preset Issue Buttons Handler
-    document.querySelectorAll(".preset-issue-btn").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-            e.preventDefault();
-            if (issueTitle) issueTitle.value = btn.dataset.title || "";
-            if (issueDesc) issueDesc.value = btn.dataset.desc || "";
-            runContributionAnalysis(e);
-        });
-    });
-
-    if (contribForm) {
-        contribForm.addEventListener("submit", runContributionAnalysis);
-    }
-
-    // Open-Source Audit & Opportunity Scanner Handler
-    if (auditRepoBtn) {
-        auditRepoBtn.addEventListener("click", async () => {
-            auditRepoBtn.disabled = true;
-            auditRepoBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Auditing AST & Security...`;
-            if (auditOpportunitiesContainer) {
-                auditOpportunitiesContainer.style.display = "block";
-                auditOpportunitiesContainer.innerHTML = `<div class="empty-state large"><i class="fa-solid fa-spinner fa-spin"></i><h3>Scanning repository AST for security risks, refactoring debt & test coverage gaps...</h3></div>`;
-            }
-
-            try {
-                if (!currentSession) {
-                    const target = repoInput ? repoInput.value.trim() : "d:\\onboarding";
-                    const cloneRes = await fetch("/api/clone", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ url_or_path: target || "d:\\onboarding" })
-                    });
-                    if (cloneRes.ok) {
-                        currentSession = await cloneRes.json();
-                    }
-                }
-
-                const res = await fetch("/api/contribution/audit", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ session_id: "default" })
-                });
-
-                if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err.detail || "Audit scanning failed.");
-                }
-
-                const auditData = await res.json();
-                renderAuditReport(auditData);
-
-            } catch (err) {
-                if (auditOpportunitiesContainer) {
-                    auditOpportunitiesContainer.innerHTML = `<div class="empty-state"><p style="color: var(--accent-rose);">❌ ${err.message}</p></div>`;
-                }
-            } finally {
-                auditRepoBtn.disabled = false;
-                auditRepoBtn.innerHTML = `<i class="fa-solid fa-shield-halved"></i> 🔍 Audit Repo & Find Opportunities`;
-            }
-        });
-    }
-
-    function renderAuditReport(auditReport) {
-        if (!auditOpportunitiesContainer) return;
-        if (!auditReport.opportunities || auditReport.opportunities.length === 0) {
-            auditOpportunitiesContainer.innerHTML = `<div class="empty-state"><h3>✅ Excellent Repository Health!</h3><p>No critical security vulnerabilities, test gaps, or circular dependency risks detected.</p></div>`;
-            return;
-        }
-
-        let html = `<div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 16px; margin-bottom: 16px;">`;
-        html += `<h3 style="margin-top:0; font-size: 16px; display: flex; align-items: center; gap: 8px;">🔍 Open Source Contribution Opportunities Audit Report for <code>${auditReport.repo_name}</code></h3>`;
-        html += `<p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Identified <strong>${auditReport.total_opportunities} actionable contribution opportunities</strong> across 🔴 Critical (${auditReport.critical_count}), 🟠 High (${auditReport.high_count}), 🟡 Medium (${auditReport.medium_count}), 🔵 Low (${auditReport.low_count}). Click any opportunity card to auto-generate a full PR implementation plan.</p>`;
-        html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">`;
-
-        auditReport.opportunities.forEach((opp) => {
-            let badgeColor = "#64748b";
-            if (opp.severity === "Critical") badgeColor = "#f43f5e";
-            else if (opp.severity === "High") badgeColor = "#f97316";
-            else if (opp.severity === "Medium") badgeColor = "#eab308";
-            else if (opp.severity === "Low") badgeColor = "#3b82f6";
-
-            const fileBadges = opp.target_files.map(f => `<span class="badge" style="font-size:10px;">${f}</span>`).join(" ");
-
-            html += `
-                <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <span class="badge" style="background: ${badgeColor}; color: white; font-weight: 600; font-size: 11px;">${opp.severity.toUpperCase()}</span>
-                            <span style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">${opp.category.replace('_', ' ')}</span>
-                        </div>
-                        <h4 style="margin: 4px 0 6px 0; font-size: 14px; line-height: 1.3;">${opp.title}</h4>
-                        <p style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.4;">${opp.description}</p>
-                        <div style="margin-bottom: 10px;">${fileBadges}</div>
-                    </div>
-                    <button type="button" class="btn btn-secondary btn-sm select-opp-btn" data-title="${encodeURIComponent(opp.suggested_issue_title)}" data-desc="${encodeURIComponent(opp.suggested_issue_desc)}" style="width: 100%; justify-content: center; font-size: 12px;">
-                        ⚡ Analyze & Generate PR Plan
-                    </button>
-                </div>
-            `;
-        });
-
-        html += `</div></div>`;
-        auditOpportunitiesContainer.innerHTML = html;
-
-        auditOpportunitiesContainer.querySelectorAll(".select-opp-btn").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                e.preventDefault();
-                const title = decodeURIComponent(btn.dataset.title || "");
-                const desc = decodeURIComponent(btn.dataset.desc || "");
-                if (issueTitle) issueTitle.value = title;
-                if (issueDesc) issueDesc.value = desc;
-                runContributionAnalysis(e);
-            });
-        });
-    }
-
-    // --- M7 Pull Request Intelligence Logic ---
-    const prForm = document.getElementById("pr-form");
-    const prTitleInput = document.getElementById("pr-title-input");
-    const prFileInput = document.getElementById("pr-file-input");
-    const prDiffInput = document.getElementById("pr-diff-input");
-    const prAnalyzeBtn = document.getElementById("pr-analyze-btn");
-    const prReviewBtn = document.getElementById("pr-review-btn");
-    const prResultsContainer = document.getElementById("pr-results-container");
-    const prEmptyState = document.getElementById("pr-empty-state");
-    const prMetricsBar = document.getElementById("pr-metrics-bar");
-    const prSummaries = document.getElementById("pr-summaries");
-
+    // =========================================================================
+    // PAGE 7: PR REVIEW TAB LOGIC
+    // =========================================================================
     const SAMPLE_FEATURE_DIFF = `diff --git a/services/auth_service.py b/services/auth_service.py
 new file mode 100644
-index 0000000..e69de29
 --- /dev/null
 +++ b/services/auth_service.py
 @@ -0,0 +1,24 @@
@@ -958,7 +1465,6 @@ index 0000000..e69de29
 --- a/services/report_service.py
 +++ b/services/report_service.py
 @@ -10,6 +10,14 @@ def generate_report(query_param: str):
-     # Added dangerous dynamic evaluation and shell execution
 +    api_key = "AIzaSyD-TESTING-SECRET-KEY-12345678"
 +    eval(query_param)
 +    import subprocess
@@ -966,7 +1472,7 @@ index 0000000..e69de29
 +    import requests
 +    requests.get(user_url, verify=False)
 +    return {"status": "generated"}
-`;
++`;
 
     const SAMPLE_ARCH_DIFF = `diff --git a/models/user_model.py b/models/user_model.py
 --- a/models/user_model.py
@@ -979,10 +1485,6 @@ index 0000000..e69de29
      user_id: str
      username: str
 `;
-
-    const loadFeatureBtn = document.getElementById("pr-load-feature-btn");
-    const loadVulnBtn = document.getElementById("pr-load-vuln-btn");
-    const loadArchBtn = document.getElementById("pr-load-arch-btn");
 
     if (loadFeatureBtn) {
         loadFeatureBtn.addEventListener("click", () => {
@@ -1023,256 +1525,263 @@ index 0000000..e69de29
             btn.classList.add("active");
             const targetId = btn.dataset.subtab;
             document.querySelectorAll(".pr-subpanel").forEach(p => {
-                if (p.id === targetId) {
-                    p.style.display = "block";
-                    p.classList.add("active");
-                } else {
-                    p.style.display = "none";
-                    p.classList.remove("active");
-                }
+                p.style.display = p.id === targetId ? "block" : "none";
             });
         });
     });
 
-    async function runPRAnalysis(runReview = false) {
+    async function runPR(endpoint, btnEl, btnLabel) {
         const diffText = (prDiffInput ? prDiffInput.value : "").trim();
         if (!diffText) {
-            alert("Please paste a git diff patch or upload a .diff file first.");
+            alert("Please paste a git diff patch or load a sample PR first.");
             return;
         }
 
-        const endpoint = runReview ? "/api/pr/review" : "/api/pr/analyze";
         const title = prTitleInput ? prTitleInput.value.trim() : "";
-        const originalText = runReview ? (prReviewBtn ? prReviewBtn.innerHTML : "") : (prAnalyzeBtn ? prAnalyzeBtn.innerHTML : "");
-
-        if (runReview && prReviewBtn) {
-            prReviewBtn.disabled = true;
-            prReviewBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Reviewing...';
-        } else if (prAnalyzeBtn) {
-            prAnalyzeBtn.disabled = true;
-            prAnalyzeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analyzing...';
+        if (btnEl) {
+            btnEl.disabled = true;
+            btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing Diff...`;
         }
 
         try {
             const res = await fetch(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ diff: diffText, title: title, session_id: "default" })
+                body: JSON.stringify({
+                    diff: diffText,
+                    title: title,
+                    session_id: "default"
+                })
             });
 
             if (!res.ok) {
                 const err = await res.json();
-                throw new Error(err.detail || "Failed to analyze PR diff.");
+                throw new Error(err.detail || "PR analysis failed.");
             }
 
             const data = await res.json();
-            renderPRResults(data, runReview);
+            renderPRResults(data);
         } catch (err) {
-            alert(`PR Analysis Error: ${err.message}`);
+            alert(`PR Error: ${err.message}`);
         } finally {
-            if (runReview && prReviewBtn) {
-                prReviewBtn.disabled = false;
-                prReviewBtn.innerHTML = originalText;
-            } else if (prAnalyzeBtn) {
-                prAnalyzeBtn.disabled = false;
-                prAnalyzeBtn.innerHTML = originalText;
+            if (btnEl) {
+                btnEl.disabled = false;
+                btnEl.innerHTML = btnLabel;
             }
         }
     }
 
     if (prForm) {
-        prForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            runPRAnalysis(false);
+        prForm.addEventListener("submit", () => {
+            runPR("/api/pr/analyze", prAnalyzeBtn, `<i class="fa-solid fa-magnifying-glass-chart"></i> Analyze Pull Request`);
         });
     }
-
     if (prReviewBtn) {
-        prReviewBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            runPRAnalysis(true);
+        prReviewBtn.addEventListener("click", () => {
+            runPR("/api/pr/review", prReviewBtn, `<i class="fa-solid fa-robot"></i> Run PR Review Agent`);
         });
     }
 
-    function renderPRResults(data, isReview = false) {
+    function renderPRResults(data) {
         if (prEmptyState) prEmptyState.style.display = "none";
         if (prResultsContainer) prResultsContainer.style.display = "block";
 
-        const summary = data.summary || {};
-        const verdict = isReview ? data.verdict : (summary.risk_level === "Critical" || summary.risk_level === "High" ? "REQUEST_CHANGES" : (summary.risk_level === "Medium" ? "COMMENT" : "APPROVE"));
-        const risks = data.risks || [];
-        const fileChanges = data.file_changes || [];
-        const archImpact = data.architecture_impact || {};
-        const testRec = data.test_recommendations || {};
-        const comments = data.review_comments || [];
+        const analysis = data.analysis || data;
 
-        let verdictColor = verdict === "APPROVE" ? "#10b981" : (verdict === "REQUEST_CHANGES" ? "#ef4444" : "#f59e0b");
-        let riskColor = summary.risk_level === "Critical" ? "#ef4444" : (summary.risk_level === "High" ? "#f97316" : (summary.risk_level === "Medium" ? "#f59e0b" : "#10b981"));
-
+        // Metric cards
         if (prMetricsBar) {
+            const riskClass = analysis.risk_score > 60 ? "stat-card stat-card-danger" : "stat-card";
             prMetricsBar.innerHTML = `
-                <div class="pr-metric-card">
-                    <span class="label">Verdict</span>
-                    <span class="value" style="color: ${verdictColor}; font-size: 15px;"><i class="fa-solid fa-stamp"></i> ${verdict}</span>
+                <div class="stat-card">
+                    <span class="stat-card-label">Files Changed</span>
+                    <span class="stat-card-value">${analysis.total_files_changed || 0}</span>
                 </div>
-                <div class="pr-metric-card">
-                    <span class="label">Change Type</span>
-                    <span class="value" style="text-transform: capitalize; font-size: 15px; color: var(--accent-cyan);">${(summary.change_type || "feature").replace('_', ' ')}</span>
+                <div class="stat-card">
+                    <span class="stat-card-label">Additions / Deletions</span>
+                    <span class="stat-card-value" style="font-size: 20px;">
+                        <span style="color: var(--color-success);">+${analysis.total_additions || 0}</span> /
+                        <span style="color: var(--color-danger);">-${analysis.total_deletions || 0}</span>
+                    </span>
                 </div>
-                <div class="pr-metric-card">
-                    <span class="label">Risk Level</span>
-                    <span class="value" style="color: ${riskColor}; font-size: 15px;">${summary.risk_level || "Low"}</span>
+                <div class="stat-card">
+                    <span class="stat-card-label">Blast Radius</span>
+                    <span class="stat-card-value">${(analysis.blast_radius_score || 0).toFixed(1)}</span>
                 </div>
-                <div class="pr-metric-card">
-                    <span class="label">Files Changed</span>
-                    <span class="value">${summary.files_changed || fileChanges.length || 0}</span>
-                </div>
-                <div class="pr-metric-card">
-                    <span class="label">Additions</span>
-                    <span class="value" style="color: #10b981;">+${summary.lines_added || 0}</span>
-                </div>
-                <div class="pr-metric-card">
-                    <span class="label">Deletions</span>
-                    <span class="value" style="color: #ef4444;">-${summary.lines_removed || 0}</span>
+                <div class="${riskClass}">
+                    <span class="stat-card-label">Risk Score</span>
+                    <span class="stat-card-value" style="color: ${analysis.risk_score > 60 ? 'var(--color-danger)' : 'var(--accent-primary)'};">
+                        ${(analysis.risk_score || 0).toFixed(0)}/100
+                    </span>
                 </div>
             `;
         }
 
+        // Summaries
         if (prSummaries) {
+            const summary = data.summary || analysis.summary || {};
             prSummaries.innerHTML = `
-                <div class="pr-summary-card">
-                    <h4><i class="fa-solid fa-briefcase"></i> Executive Summary</h4>
-                    <p>${summary.executive_summary || "No executive summary generated."}</p>
-                </div>
-                <div class="pr-summary-card">
-                    <h4><i class="fa-solid fa-code"></i> Developer Summary</h4>
-                    <div style="font-size: 12px; line-height: 1.5; color: var(--text-secondary); white-space: pre-line;">${summary.developer_summary || "No technical summary generated."}</div>
+                <div class="dev-card" style="margin-bottom: 12px;">
+                    <div class="dev-card-header"><h3><i class="fa-solid fa-clipboard-check"></i> Executive Summary</h3></div>
+                    <div class="dev-card-body"><p style="line-height: 1.5;">${escapeHtml(summary.executive_summary || "Diff analyzed.")}</p></div>
                 </div>
             `;
         }
 
+        // Subpanel 1: Files & Symbols
         const subFiles = document.getElementById("pr-sub-files");
         if (subFiles) {
-            if (!fileChanges.length) {
-                subFiles.innerHTML = `<p class="text-muted" style="padding: 10px;">No parsed file changes available.</p>`;
-            } else {
-                subFiles.innerHTML = fileChanges.map(fc => `
-                    <div class="pr-file-card">
-                        <div class="pr-file-header">
-                            <div>
-                                <span class="badge" style="margin-right: 6px; font-size: 10px; text-transform: uppercase;">${fc.status}</span>
-                                <span class="pr-file-path">${fc.file_path}</span>
-                            </div>
-                            <div class="pr-diff-stat">
-                                <span class="add">+${fc.additions}</span> / <span class="del">-${fc.deletions}</span>
-                            </div>
-                        </div>
-                        ${fc.modified_symbols && fc.modified_symbols.length ? `
-                            <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">
-                                <strong>Symbols:</strong> ${fc.modified_symbols.map(s => `<code style="background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 3px; color: #a5b4fc;">${s}</code>`).join(' ')}
-                            </div>
-                        ` : ''}
+            const files = analysis.changed_files || [];
+            subFiles.innerHTML = `
+                <div class="dev-card">
+                    <div class="dev-card-header"><h3>Changed Files (${files.length})</h3></div>
+                    <div class="dev-card-body" style="padding: 0;">
+                        <table class="dev-table">
+                            <thead><tr><th>File Path</th><th>Change Type</th><th>Additions</th><th>Deletions</th><th>Symbols</th></tr></thead>
+                            <tbody>
+                                ${files.map(f => `
+                                    <tr>
+                                        <td><code style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(f.file_path)}</code></td>
+                                        <td><span class="badge">${escapeHtml(f.status)}</span></td>
+                                        <td style="color: var(--color-success); font-family: var(--font-mono);">+${f.additions}</td>
+                                        <td style="color: var(--color-danger); font-family: var(--font-mono);">-${f.deletions}</td>
+                                        <td>${(f.symbols_modified || []).map(s => `<span class="badge badge-purple">${escapeHtml(s)}</span>`).join(" ") || '<span class="text-muted">None</span>'}</td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
                     </div>
-                `).join('');
-            }
+                </div>
+            `;
         }
 
+        // Subpanel 2: Architecture Impact
         const subArch = document.getElementById("pr-sub-arch");
         if (subArch) {
+            const downstream = analysis.downstream_impacted_files || [];
             subArch.innerHTML = `
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
-                    <div class="glass-panel" style="padding: 14px;">
-                        <h4 style="margin-top:0; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-layer-group"></i> Layers Touched</h4>
-                        <p style="font-size: 12px; color: var(--text-secondary);">${archImpact.architectural_layers && archImpact.architectural_layers.length ? archImpact.architectural_layers.join(', ') : 'Standard'}</p>
-                        <h4 style="margin-top: 10px; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-door-open"></i> Impacted Entry Points</h4>
-                        <p style="font-size: 12px; color: var(--text-secondary);">${archImpact.affected_entry_points && archImpact.affected_entry_points.length ? archImpact.affected_entry_points.map(e => `<code>${e}</code>`).join(', ') : 'None'}</p>
-                    </div>
-                    <div class="glass-panel" style="padding: 14px;">
-                        <h4 style="margin-top:0; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-arrow-up-right-dots"></i> Coupling Impact Score</h4>
-                        <p style="font-size: 18px; font-weight: 700; color: #a5b4fc; margin: 4px 0;">${archImpact.coupling_increase_score || 0} / 10.0</p>
-                        <h4 style="margin-top: 10px; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-arrows-split-up-and-left"></i> Upstream Blast Radius</h4>
-                        <p style="font-size: 12px; color: var(--text-secondary);">${archImpact.upstream_impact && archImpact.upstream_impact.length ? `${archImpact.upstream_impact.length} dependent file(s)` : 'Isolated component'}</p>
+                <div class="dev-card">
+                    <div class="dev-card-header"><h3>Downstream Impacted Files (${downstream.length})</h3></div>
+                    <div class="dev-card-body">
+                        <div class="tag-cloud">
+                            ${downstream.map(d => `<span class="badge" style="font-family: var(--font-mono);">${escapeHtml(d)}</span>`).join("") || '<p class="placeholder-text">No downstream files affected.</p>'}
+                        </div>
                     </div>
                 </div>
-                ${archImpact.layer_violations && archImpact.layer_violations.length ? `
-                    <div class="pr-risk-item" style="border-left: 4px solid #ef4444;">
-                        <h4 style="margin:0 0 6px 0; color: #ef4444; font-size: 13px;"><i class="fa-solid fa-triangle-exclamation"></i> Architectural Layer Violations Detected</h4>
-                        ${archImpact.layer_violations.map(v => `<p style="font-size: 12px; margin: 4px 0; color: #fca5a5;">${v}</p>`).join('')}
-                    </div>
-                ` : '<div class="glass-panel" style="padding: 12px; color: #10b981; font-size: 12.5px;"><i class="fa-solid fa-circle-check"></i> No architectural layer violations detected.</div>'}
             `;
         }
 
+        // Subpanel 3: Test Impact
         const subTests = document.getElementById("pr-sub-tests");
         if (subTests) {
+            const testImpact = analysis.test_impact || {};
+            const existing = testImpact.existing_tests_to_run || [];
+            const suggested = testImpact.suggested_new_tests || [];
             subTests.innerHTML = `
-                ${testRec.missing_tests && testRec.missing_tests.length ? `
-                    <div class="pr-risk-item Medium" style="margin-bottom: 14px;">
-                        <h4 style="margin:0 0 6px 0; color: #f59e0b; font-size: 13px;"><i class="fa-solid fa-circle-exclamation"></i> Missing Test Warnings</h4>
-                        ${testRec.missing_tests.map(m => `<p style="font-size: 12px; margin: 4px 0; color: #fde68a;">${m}</p>`).join('')}
-                    </div>
-                ` : ''}
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
-                    <div class="glass-panel" style="padding: 14px;">
-                        <h4 style="margin-top:0; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-vial-circle-check"></i> Recommended Tests to Run</h4>
-                        ${testRec.recommended_test_files && testRec.recommended_test_files.length ? `
-                            <ul style="padding-left: 18px; margin: 4px 0; font-size: 12px; color: var(--text-secondary);">
-                                ${testRec.recommended_test_files.map(t => `<li><code>${t}</code></li>`).join('')}
+                <div class="overview-split">
+                    <div class="dev-card">
+                        <div class="dev-card-header"><h3>Existing Tests to Run (${existing.length})</h3></div>
+                        <div class="dev-card-body">
+                            <ul style="margin-left: 16px; font-size: 12px; line-height: 1.6;">
+                                ${existing.map(t => `<li><code style="font-family: var(--font-mono);">${escapeHtml(t)}</code></li>`).join("") || '<span class="text-muted">No tests impacted.</span>'}
                             </ul>
-                        ` : '<p style="font-size: 12px; color: var(--text-muted);">No specific test files identified.</p>'}
+                        </div>
                     </div>
-                    <div class="glass-panel" style="padding: 14px;">
-                        <h4 style="margin-top:0; font-size: 13px; color: var(--accent-cyan);"><i class="fa-solid fa-list-check"></i> Recommended Scenarios & Edge Cases</h4>
-                        ${testRec.recommended_scenarios && testRec.recommended_scenarios.length ? `
-                            <ul style="padding-left: 18px; margin: 4px 0; font-size: 12px; color: var(--text-secondary);">
-                                ${testRec.recommended_scenarios.slice(0, 4).map(s => `<li>${s}</li>`).join('')}
-                                ${testRec.recommended_edge_cases ? testRec.recommended_edge_cases.slice(0, 3).map(e => `<li style="color: #cbd5e1;"><em>Edge case:</em> ${e}</li>`).join('') : ''}
+                    <div class="dev-card">
+                        <div class="dev-card-header"><h3>Suggested New Tests (${suggested.length})</h3></div>
+                        <div class="dev-card-body">
+                            <ul style="margin-left: 16px; font-size: 12px; line-height: 1.6;">
+                                ${suggested.map(t => `<li>${escapeHtml(t)}</li>`).join("") || '<span class="text-muted">No test gaps detected.</span>'}
                             </ul>
-                        ` : '<p style="font-size: 12px; color: var(--text-muted);">No custom test scenarios needed.</p>'}
+                        </div>
                     </div>
                 </div>
             `;
         }
 
-        const subSecurity = document.getElementById("pr-sub-security");
-        if (subSecurity) {
-            if (!risks.length) {
-                subSecurity.innerHTML = `<div class="glass-panel" style="padding: 14px; color: #10b981; font-size: 13px;"><i class="fa-solid fa-shield-check"></i> Static security review passed: 0 vulnerabilities found in PR diff.</div>`;
-            } else {
-                subSecurity.innerHTML = risks.map(r => `
-                    <div class="pr-risk-item ${r.severity}">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <strong style="color: ${r.severity === 'Critical' ? '#ef4444' : (r.severity === 'High' ? '#f97316' : '#f59e0b')}; font-size: 13.5px;"><i class="fa-solid fa-bug"></i> ${r.title}</strong>
-                            <span class="badge" style="background: ${r.severity === 'Critical' ? '#ef4444' : '#f59e0b'}; color: white; font-size: 10px;">${r.severity.toUpperCase()}</span>
-                        </div>
-                        <p style="font-size: 12px; margin: 2px 0 6px 0; color: var(--text-secondary);">File: <code>${r.file_path}${r.line_number ? `:${r.line_number}` : ''}</code></p>
-                        ${r.evidence ? `<pre style="background: rgba(0,0,0,0.4); padding: 8px; border-radius: 4px; font-size: 11.5px; color: #fca5a5; overflow-x: auto;">${r.evidence}</pre>` : ''}
-                        <p style="font-size: 12px; margin-top: 6px; color: #6ee7b7;"><strong>Remediation:</strong> ${r.remediation}</p>
+        // Subpanel 4: Security Risks
+        const subSec = document.getElementById("pr-sub-security");
+        if (subSec) {
+            const vulns = analysis.vulnerabilities || [];
+            subSec.innerHTML = `
+                <div class="dev-card">
+                    <div class="dev-card-header"><h3>Diff Security Findings (${vulns.length})</h3></div>
+                    <div class="dev-card-body">
+                        ${vulns.length === 0 ? '<div class="empty-state"><i class="fa-solid fa-circle-check" style="color:var(--color-success);"></i><h3>Clean Patch</h3><p>No secrets, command injections, or unsafe eval calls detected.</p></div>' : ''}
+                        ${vulns.map(v => `
+                            <div class="review-comment-card" style="border-left-color: var(--color-danger); margin-bottom: 10px;">
+                                <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
+                                    <span class="badge badge-red">${escapeHtml(v.severity || 'HIGH')}</span>
+                                    <span style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(v.file_path)}:${v.line_number || 1}</span>
+                                </div>
+                                <strong style="font-size: 13px;">${escapeHtml(v.rule_id)}</strong>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">${escapeHtml(v.description)}</p>
+                            </div>
+                        `).join("")}
                     </div>
-                `).join('');
-            }
+                </div>
+            `;
         }
 
+        // Subpanel 5: Review Comments
         const subComments = document.getElementById("pr-sub-comments");
         if (subComments) {
-            if (!comments.length) {
-                subComments.innerHTML = `<div class="glass-panel" style="padding: 14px; color: #10b981; font-size: 13px;"><i class="fa-solid fa-thumbs-up"></i> No actionable review comments generated. Code looks ready to merge.</div>`;
-            } else {
-                subComments.innerHTML = comments.map(c => `
-                    <div class="pr-comment-card ${c.severity || 'warning'}">
-                        <div class="pr-comment-header">
-                            <span class="pr-comment-title"><i class="fa-solid fa-comment-dots"></i> ${c.title}</span>
-                            <div>
-                                <span class="badge" style="font-size: 10px; margin-right: 6px; text-transform: uppercase;">${c.severity}</span>
-                                <code>${c.file_path}${c.line_number ? `:${c.line_number}` : ''}</code>
+            const review = data.review || {};
+            const comments = review.comments || [];
+            subComments.innerHTML = `
+                <div class="dev-card">
+                    <div class="dev-card-header"><h3>Automated Code Review Comments (${comments.length})</h3></div>
+                    <div class="dev-card-body">
+                        ${comments.length === 0 ? '<div class="empty-state"><i class="fa-solid fa-thumbs-up" style="color:var(--color-success);"></i><h3>Looks Good to Merge!</h3><p>No critical code style or architectural regressions noted.</p></div>' : ''}
+                        ${comments.map(c => `
+                            <div class="review-comment-card">
+                                <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
+                                    <span class="badge badge-purple">${escapeHtml(c.category || 'Quality')}</span>
+                                    <span style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(c.file_path)}:${c.line_number || 1}</span>
+                                </div>
+                                <p style="font-size: 12px; color: var(--text-primary); line-height: 1.5;">${escapeHtml(c.comment)}</p>
+                                ${c.suggested_code ? `<pre style="margin-top: 8px; background: var(--bg-subtle); padding: 8px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 11px;"><code>${escapeHtml(c.suggested_code)}</code></pre>` : ''}
                             </div>
-                        </div>
-                        <p style="font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); margin: 6px 0;">${c.body}</p>
-                        ${c.evidence ? `<div class="pr-comment-evidence">${c.evidence}</div>` : ''}
-                        ${c.recommendation ? `<div class="pr-comment-recommendation"><strong>Recommendation:</strong> ${c.recommendation}</div>` : ''}
+                        `).join("")}
                     </div>
-                `).join('');
-            }
+                </div>
+            `;
         }
+    }
+
+    // =========================================================================
+    // MODAL 2: ONBOARDING GUIDE GENERATOR
+    // =========================================================================
+    if (generateGuideBtn) {
+        generateGuideBtn.addEventListener("click", async () => {
+            if (!currentSession) {
+                alert("Please analyze a repository first.");
+                return;
+            }
+
+            generateGuideBtn.disabled = true;
+            generateGuideBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating Guide...`;
+            if (guideContent) {
+                guideContent.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><h3>Building your comprehensive Onboarding Guide with Groq AI...</h3></div>`;
+            }
+
+            try {
+                const res = await fetch("/api/generate-guide", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: "default" })
+                });
+
+                if (!res.ok) throw new Error("Guide generation failed.");
+                const data = await res.json();
+                if (guideContent) guideContent.innerHTML = marked.parse(data.guide);
+            } catch (err) {
+                if (guideContent) {
+                    guideContent.innerHTML = `<div class="empty-state"><p style="color: var(--color-danger);">❌ ${escapeHtml(err.message)}</p></div>`;
+                }
+            } finally {
+                generateGuideBtn.disabled = false;
+                generateGuideBtn.innerHTML = `<i class="fa-solid fa-sparkles"></i> Regenerate Guide`;
+            }
+        });
     }
 });
