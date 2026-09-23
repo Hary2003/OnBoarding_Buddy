@@ -3,435 +3,814 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OnBoarding Buddy | AI Repository Intelligence</title>
-    <!-- Google Fonts & Icons -->
+    <title>OnBoarding Buddy | Developer Code Intelligence</title>
+    <!-- Google Fonts & Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Vis Network for 2D Dependency Graph -->
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
     <script>
         if (typeof vis === 'undefined') {
-            document.write('<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"><\\/script>');
+            document.write('<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"><\/script>');
         }
     </script>
     <!-- Marked for Markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- Prism for Code Highlighting -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <!-- Prism for Code Highlighting (Clean Light Theme) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="app-container">
+    <div class="app-shell">
         <!-- Top Navigation Bar -->
-        <header class="navbar glass-panel">
-            <div class="logo-group">
-                <div class="logo-icon">🚀</div>
-                <div>
-                    <h1 class="logo-title">OnBoarding Buddy</h1>
-                    <span class="logo-subtitle">Groq AI Code Intelligence & Architecture Analyzer</span>
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="brand-badge">
+                    <span class="brand-icon"><i class="fa-solid fa-compass"></i></span>
+                    <span>OnBoarding Buddy</span>
+                    <span class="brand-version">v2.0</span>
                 </div>
+
+                <!-- Repo Switcher Trigger Pill -->
+                <button type="button" id="repo-switcher-btn" class="repo-pill" title="Click to switch or analyze repository">
+                    <i class="fa-brands fa-github"></i>
+                    <span id="current-repo-label">psf/requests</span>
+                    <i class="fa-solid fa-chevron-down" style="font-size: 9px; margin-left: 2px;"></i>
+                </button>
             </div>
 
-            <!-- Repo URL Input Form -->
-            <form id="repo-form" class="repo-input-container" action="javascript:void(0);" onsubmit="event.preventDefault();">
-                <div class="input-wrapper">
-                    <i class="fa-brands fa-github input-icon"></i>
-                    <input type="text" id="repo-input" placeholder="Enter GitHub URL or local folder path..." value="https://github.com/psf/requests" required>
+            <div class="topbar-right">
+                <!-- Groq AI Status Indicator -->
+                <div class="status-indicator" id="groq-status">
+                    <span class="status-dot green"></span>
+                    <span>Connecting Groq AI...</span>
                 </div>
-                <button type="submit" id="analyze-btn" class="btn btn-primary">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Repo
-                </button>
-            </form>
 
-            <div class="status-badge" id="groq-status">
-                <span class="pulse-dot grey"></span> Checking Groq API...
+                <!-- Quick Onboarding Guide Trigger -->
+                <button type="button" id="open-guide-modal-btn" class="btn btn-secondary btn-sm">
+                    <i class="fa-solid fa-book-bookmark"></i> Onboarding Guide
+                </button>
+
+                <!-- Quick Rescan Trigger -->
+                <button type="button" id="quick-rescan-btn" class="btn btn-primary btn-sm">
+                    <i class="fa-solid fa-rotate"></i> Switch / Rescan
+                </button>
             </div>
         </header>
 
-        <!-- Main Workspace -->
-        <main class="workspace">
-            <!-- Navigation Tabs -->
-            <nav class="tab-nav">
-                <button class="tab-btn active" data-tab="explorer-tab">
-                    <i class="fa-solid fa-folder-tree"></i> Code Explorer
-                </button>
-                <button class="tab-btn" data-tab="guide-tab">
-                    <i class="fa-solid fa-book-open"></i> Onboarding Guide
-                </button>
-                <button class="tab-btn" data-tab="graph-tab">
-                    <i class="fa-solid fa-diagram-project"></i> Dependency Map
-                </button>
-                <button class="tab-btn" data-tab="chat-tab">
-                    <i class="fa-solid fa-comments"></i> AI Assistant
-                </button>
-                <button class="tab-btn" data-tab="agent-tab">
-                    <i class="fa-solid fa-route"></i> Agent Explorer
-                </button>
-                <button class="tab-btn" data-tab="contribution-tab">
-                    <i class="fa-solid fa-bullseye"></i> Contribution Intelligence
-                </button>
-                <button class="tab-btn" data-tab="pr-tab">
-                    <i class="fa-solid fa-code-pull-request"></i> PR Intelligence
-                </button>
-            </nav>
+        <!-- Main Body Area -->
+        <div class="workspace-body">
+            <!-- Compact Developer Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-nav">
+                    <span class="nav-section-title">Navigation</span>
+                    <button class="nav-item active" data-tab="overview-tab">
+                        <i class="fa-solid fa-house"></i>
+                        <span>Overview</span>
+                    </button>
+                    <button class="nav-item" data-tab="repository-tab">
+                        <i class="fa-solid fa-folder-tree"></i>
+                        <span>Repository</span>
+                        <span class="nav-badge" id="nav-file-count">0</span>
+                    </button>
+                    <button class="nav-item" data-tab="architecture-tab">
+                        <i class="fa-solid fa-diagram-project"></i>
+                        <span>Architecture</span>
+                    </button>
+                    <button class="nav-item" data-tab="assistant-tab">
+                        <i class="fa-solid fa-message"></i>
+                        <span>AI Assistant</span>
+                    </button>
+                    <button class="nav-item" data-tab="contributions-tab">
+                        <i class="fa-solid fa-bullseye"></i>
+                        <span>Contributions</span>
+                        <span class="nav-badge" id="nav-contrib-count">0</span>
+                    </button>
+                    <button class="nav-item" data-tab="agent-tab">
+                        <i class="fa-solid fa-route"></i>
+                        <span>Agent Explorer</span>
+                    </button>
+                    <button class="nav-item" data-tab="pr-tab">
+                        <i class="fa-solid fa-code-pull-request"></i>
+                        <span>PR Review</span>
+                    </button>
+                </div>
 
-            <!-- Tab Content Area -->
-            <div class="tab-content">
-                <!-- TAB 1: CODE EXPLORER -->
-                <section id="explorer-tab" class="tab-pane active">
-                    <div class="explorer-grid">
-                        <!-- Sidebar: File Tree & Ranked List -->
-                        <aside class="explorer-sidebar glass-panel">
-                            <div class="sidebar-header">
-                                <h3><i class="fa-solid fa-list-check"></i> Files & Activity</h3>
+                <div class="sidebar-footer">
+                    <div class="sidebar-footer-info">
+                        <span id="footer-session-name" style="font-weight: 500; font-family: var(--font-mono);">psf/requests</span>
+                        <span class="badge" style="font-size: 10px;">AST Ready</span>
+                    </div>
+                    <div class="sidebar-footer-info">
+                        <span id="footer-indexed-time">Just now</span>
+                        <span style="font-size: 10px; color: var(--text-muted);">Groq LLaMA 3.3</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Viewport Content -->
+            <main class="main-viewport">
+                <!-- ==========================================
+                     TAB 1: REPOSITORY OVERVIEW
+                     ========================================== -->
+                <section id="overview-tab" class="tab-pane active">
+                    <div class="page-header">
+                        <div class="page-title-group">
+                            <h2>Repository Overview</h2>
+                            <p>High-level architectural health, module composition, and recent repository activity.</p>
+                        </div>
+                        <div class="page-actions">
+                            <button id="overview-guide-btn" class="btn btn-secondary btn-sm">
+                                <i class="fa-solid fa-book-bookmark"></i> View Full Guide
+                            </button>
+                            <button id="overview-rescan-btn" class="btn btn-primary btn-sm">
+                                <i class="fa-solid fa-rotate"></i> Rescan AST
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 4 Stat Cards in 1 Row -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-card-label">Files & Scale <i class="fa-regular fa-file-code"></i></span>
+                            <span class="stat-card-value" id="stat-files-val">0</span>
+                            <span class="stat-card-meta" id="stat-lines-meta">0 total source lines</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-card-label">Modules & Categories <i class="fa-solid fa-cube"></i></span>
+                            <span class="stat-card-value" id="stat-modules-val">0</span>
+                            <span class="stat-card-meta" id="stat-modules-meta">4 architectural types</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-card-label">Entry Points <i class="fa-solid fa-rocket"></i></span>
+                            <span class="stat-card-value" id="stat-entry-val">0</span>
+                            <span class="stat-card-meta" id="stat-entry-meta">Application entry flows</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-card-label">Audit Findings <i class="fa-solid fa-shield-halved"></i></span>
+                            <span class="stat-card-value" id="stat-audit-val">0</span>
+                            <span class="stat-card-meta" id="stat-audit-meta">Open contribution opportunities</span>
+                        </div>
+                    </div>
+
+                    <!-- Overview 2-Column Split -->
+                    <div class="overview-split">
+                        <!-- Left Column: Architecture Narrative & Core Modules -->
+                        <div class="overview-column">
+                            <div class="dev-card">
+                                <div class="dev-card-header">
+                                    <h3><i class="fa-solid fa-sitemap"></i> Architecture Summary</h3>
+                                    <span class="badge badge-purple" id="overview-arch-type">Modular API</span>
+                                </div>
+                                <div class="dev-card-body">
+                                    <div id="overview-arch-narrative" class="arch-narrative">
+                                        <p class="placeholder-text">Analyzing architectural patterns and module interactions...</p>
+                                    </div>
+                                    <div style="margin-top: 12px; display: flex; gap: 8px;">
+                                        <button id="refresh-narrative-btn" class="btn btn-secondary btn-sm">
+                                            <i class="fa-solid fa-bolt"></i> Generate Groq Deep Narrative
+                                        </button>
+                                        <button id="view-graph-jump-btn" class="btn btn-secondary btn-sm">
+                                            <i class="fa-solid fa-diagram-project"></i> Open Dependency Map
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="dev-card">
+                                <div class="dev-card-header">
+                                    <h3><i class="fa-solid fa-layer-group"></i> Core Architecture Modules</h3>
+                                    <span class="badge badge-blue">Highest Centrality</span>
+                                </div>
+                                <div class="dev-card-body" style="padding: 0;">
+                                    <table class="dev-table" id="overview-core-modules-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Module File</th>
+                                                <th>Imports By</th>
+                                                <th>Exports</th>
+                                                <th>Category</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="overview-core-modules-tbody">
+                                            <tr><td colspan="5" class="empty-state">Loading core modules...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="dev-card">
+                                <div class="dev-card-header">
+                                    <h3><i class="fa-solid fa-rocket"></i> Application Entry Points</h3>
+                                    <span class="badge badge-green">Startup Root</span>
+                                </div>
+                                <div class="dev-card-body">
+                                    <div id="overview-entry-points-list" class="tag-cloud">
+                                        <span class="placeholder-text">Detecting entry points...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Recent Activity, Languages, Important Findings -->
+                        <div class="overview-column">
+                            <div class="dev-card">
+                                <div class="dev-card-header">
+                                    <h3><i class="fa-solid fa-fire"></i> Most Active Source Files</h3>
+                                    <span class="badge">Git Activity Score</span>
+                                </div>
+                                <div class="dev-card-body" style="padding: 0;">
+                                    <table class="dev-table" id="overview-active-files-table">
+                                        <thead>
+                                            <tr>
+                                                <th>File Path</th>
+                                                <th>Score</th>
+                                                <th>Lines</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="overview-active-files-tbody">
+                                            <tr><td colspan="4" class="empty-state">Loading active files...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="dev-card">
+                                <div class="dev-card-header">
+                                    <h3><i class="fa-solid fa-code"></i> Language Breakdown</h3>
+                                    <span class="badge" id="overview-lang-count">0 languages</span>
+                                </div>
+                                <div class="dev-card-body">
+                                    <div class="lang-bar" id="overview-lang-bar"></div>
+                                    <div class="lang-legend" id="overview-lang-legend"></div>
+                                </div>
+                            </div>
+
+                            <div class="dev-card">
+                                <div class="dev-card-header">
+                                    <h3><i class="fa-solid fa-triangle-exclamation"></i> Key Findings & Opportunities</h3>
+                                    <span class="badge badge-amber" id="overview-findings-badge">Audit</span>
+                                </div>
+                                <div class="dev-card-body" id="overview-findings-body">
+                                    <p class="placeholder-text">Running automated repository AST and security audit...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==========================================
+                     TAB 2: REPOSITORY (IDE / CODE EXPLORER)
+                     ========================================== -->
+                <section id="repository-tab" class="tab-pane">
+                    <div class="page-header">
+                        <div class="page-title-group">
+                            <h2>Repository Explorer</h2>
+                            <p>Browse source tree, inspect exported symbols, view code, and generate AI file summaries.</p>
+                        </div>
+                    </div>
+
+                    <div class="repo-ide-container">
+                        <!-- Panel 1: File Tree List -->
+                        <div class="ide-panel">
+                            <div class="ide-panel-header">
+                                <h3><i class="fa-solid fa-folder-tree"></i> Files</h3>
                                 <span class="badge" id="file-count">0 files</span>
                             </div>
-                            <div class="sidebar-scroll" id="tree-container">
+                            <div class="tree-search-bar">
+                                <input type="text" id="repo-search" class="input-text" placeholder="Filter files (e.g. auth, api)...">
+                            </div>
+                            <div class="tree-list" id="tree-container">
                                 <div class="empty-state">
                                     <i class="fa-solid fa-code"></i>
-                                    <p>Enter a repository URL above and click <strong>Analyze Repo</strong> to get started.</p>
+                                    <p>Loading repository tree...</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Panel 2: Code Viewer -->
+                        <div class="ide-panel">
+                            <div class="code-viewer-bar">
+                                <div style="display:flex; align-items:center; gap: 8px;">
+                                    <i class="fa-regular fa-file-code" style="color: var(--accent-primary);"></i>
+                                    <span id="current-filename" style="font-weight: 600; color: var(--text-primary);">Select a file to view</span>
+                                </div>
+                                <div style="display:flex; align-items:center; gap: 8px;">
+                                    <span class="badge" id="current-file-lines" style="font-size: 11px;">0 lines</span>
+                                    <button id="copy-code-btn" class="btn btn-secondary btn-sm" title="Copy file content">
+                                        <i class="fa-regular fa-copy"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="code-viewer-content">
+                                <pre><code id="code-content" class="language-python"># Select a file from the repository tree to view its source code.</code></pre>
+                            </div>
+                        </div>
+
+                        <!-- Panel 3: Symbols & AI Summary -->
+                        <div class="ide-panel">
+                            <div class="ide-panel-header">
+                                <h3><i class="fa-solid fa-robot"></i> Groq AI File Summary</h3>
+                                <button id="summarize-btn" class="btn btn-primary btn-sm" disabled>
+                                    <i class="fa-solid fa-bolt"></i> Summarize
+                                </button>
+                            </div>
+                            <div class="dev-card-body" style="flex: 1; overflow-y: auto;">
+                                <div id="summary-text" class="markdown-body" style="margin-bottom: 16px;">
+                                    <p class="placeholder-text" style="color: var(--text-muted);">Click <strong>"Summarize"</strong> to generate a developer architectural summary of this file.</p>
+                                </div>
+
+                                <div style="border-top: 1px solid var(--border-subtle); padding-top: 14px; margin-bottom: 14px;">
+                                    <h4 style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">
+                                        <i class="fa-solid fa-cube"></i> Exported Symbols
+                                    </h4>
+                                    <div id="file-symbols-list" class="tag-cloud">
+                                        <span class="text-muted" style="font-size: 11px;">Select a file</span>
+                                    </div>
+                                </div>
+
+                                <div style="border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+                                    <h4 style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">
+                                        <i class="fa-solid fa-code-branch"></i> Imported Dependencies
+                                    </h4>
+                                    <div id="file-deps-list" class="tag-cloud">
+                                        <span class="text-muted" style="font-size: 11px;">Select a file</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==========================================
+                     TAB 3: ARCHITECTURE (DEPENDENCY GRAPH)
+                     ========================================== -->
+                <section id="architecture-tab" class="tab-pane">
+                    <div class="page-header">
+                        <div class="page-title-group">
+                            <h2>Architecture & Dependency Map</h2>
+                            <p>Interactive 2D module dependency network, circular cycle detection, and centrality inspector.</p>
+                        </div>
+                    </div>
+
+                    <!-- Graph Controls Bar -->
+                    <div class="arch-controls-bar">
+                        <div class="arch-controls-left">
+                            <div class="control-item">
+                                <label><i class="fa-solid fa-filter"></i> Filter:</label>
+                                <select id="graph-filter-select" class="select-input" style="width: auto;">
+                                    <option value="all">All Files & Modules</option>
+                                    <option value="core">Core Modules (High Centrality)</option>
+                                    <option value="entry">Entry Points & Call Chains</option>
+                                    <option value="circular">Circular Dependencies Only</option>
+                                    <option value="isolated">Isolated Files</option>
+                                </select>
+                            </div>
+                            <div class="control-item">
+                                <label><i class="fa-solid fa-sitemap"></i> Layout:</label>
+                                <select id="graph-layout-select" class="select-input" style="width: auto;">
+                                    <option value="force">Force-Directed</option>
+                                    <option value="tree">Hierarchical Tree</option>
+                                </select>
+                            </div>
+                            <div class="control-item">
+                                <label style="display:flex; align-items:center; gap: 4px; cursor: pointer;">
+                                    <input type="checkbox" id="graph-external-chk" checked>
+                                    <span>External Packages</span>
+                                </label>
+                            </div>
+                        </div>
+                        <button id="refresh-graph-btn" class="btn btn-secondary btn-sm">
+                            <i class="fa-solid fa-rotate"></i> Reset Camera
+                        </button>
+                    </div>
+
+                    <!-- Canvas with Slideout Node Inspector -->
+                    <div class="graph-canvas-container">
+                        <div id="network-graph" class="network-canvas"></div>
+
+                        <!-- Slideout Node Inspector Drawer -->
+                        <aside id="node-inspector" class="node-inspector-drawer hidden">
+                            <div class="inspector-drawer-header">
+                                <div>
+                                    <span class="badge badge-purple" id="inspector-node-type">Source File</span>
+                                    <h3 id="inspector-node-title" style="margin-top: 2px;">module.py</h3>
+                                </div>
+                                <button id="close-inspector-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                            <div class="inspector-drawer-body">
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                                    <div class="stat-card" style="padding: 10px;">
+                                        <span class="stat-card-label" style="font-size: 10px;">In-Degree</span>
+                                        <span class="stat-card-value" id="inspector-in-degree" style="font-size: 18px;">0</span>
+                                    </div>
+                                    <div class="stat-card" style="padding: 10px;">
+                                        <span class="stat-card-label" style="font-size: 10px;">Out-Degree</span>
+                                        <span class="stat-card-value" id="inspector-out-degree" style="font-size: 18px;">0</span>
+                                    </div>
+                                </div>
+
+                                <div class="stat-card" style="padding: 10px;">
+                                    <span class="stat-card-label" style="font-size: 10px;">Git Activity Score</span>
+                                    <span class="stat-card-value" id="inspector-score" style="font-size: 18px;">0.0</span>
+                                </div>
+
+                                <div>
+                                    <h4 style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">
+                                        Connected Dependencies
+                                    </h4>
+                                    <div id="inspector-deps-list" class="tag-cloud"></div>
+                                </div>
+
+                                <div>
+                                    <h4 style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">
+                                        Exported Symbols
+                                    </h4>
+                                    <div id="inspector-symbols-list" class="tag-cloud"></div>
+                                </div>
+
+                                <div style="margin-top: auto; padding-top: 10px;">
+                                    <button id="jump-code-btn" class="btn btn-primary" style="width: 100%;">
+                                        <i class="fa-solid fa-code"></i> Jump to Source in Repository
+                                    </button>
                                 </div>
                             </div>
                         </aside>
+                    </div>
 
-                        <!-- Main Viewer: Code & AI Summary -->
-                        <div class="explorer-viewer">
-                            <!-- Selected File Banner -->
-                            <div class="viewer-header glass-panel">
-                                <div class="file-info">
-                                    <i class="fa-regular fa-file-code"></i>
-                                    <span id="current-filename">Select a file to view content</span>
-                                </div>
-                                <button id="summarize-btn" class="btn btn-secondary btn-sm" disabled>
-                                    <i class="fa-solid fa-bolt"></i> Summarize with Groq AI
-                                </button>
+                    <!-- Modules & Cycles Tables -->
+                    <div class="overview-split">
+                        <div class="dev-card">
+                            <div class="dev-card-header">
+                                <h3><i class="fa-solid fa-cubes"></i> Architecture Modules Breakdown</h3>
                             </div>
+                            <div class="dev-card-body" style="padding: 0; max-height: 320px; overflow-y: auto;">
+                                <table class="dev-table" id="arch-modules-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Module</th>
+                                            <th>Category</th>
+                                            <th>In</th>
+                                            <th>Out</th>
+                                            <th>Circular?</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="arch-modules-tbody">
+                                        <tr><td colspan="5" class="empty-state">Loading module breakdown...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
 
-                            <div class="viewer-body">
-                                <!-- Code Editor / View Pane -->
-                                <div class="code-pane glass-panel">
-                                    <pre><code id="code-content" class="language-python"># Select a file from the repository tree to view its source code.</code></pre>
-                                </div>
-
-                                <!-- AI Summary Panel -->
-                                <div class="summary-pane glass-panel">
-                                    <div class="summary-header">
-                                        <h4><i class="fa-solid fa-robot"></i> Groq AI Summary</h4>
-                                        <span class="badge badge-purple" id="summary-model-tag">groq/compound</span>
-                                    </div>
-                                    <div class="summary-content" id="summary-text">
-                                        <p class="placeholder-text">Click <strong>"Summarize with Groq AI"</strong> to generate a developer-focused architectural summary of this file.</p>
-                                    </div>
+                        <div class="dev-card">
+                            <div class="dev-card-header">
+                                <h3><i class="fa-solid fa-arrows-spin"></i> Circular Dependency Cycles</h3>
+                                <span class="badge badge-amber" id="arch-cycles-count">0 Cycles</span>
+                            </div>
+                            <div class="dev-card-body" id="arch-cycles-list" style="max-height: 320px; overflow-y: auto;">
+                                <div class="empty-state">
+                                    <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
+                                    <h3>No Circular Dependencies Detected</h3>
+                                    <p>The codebase exhibits clean acyclic module hierarchy.</p>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- TAB 2: ONBOARDING GUIDE -->
-                <section id="guide-tab" class="tab-pane">
-                    <div class="guide-container glass-panel">
-                        <div class="guide-toolbar">
-                            <div>
-                                <h2><i class="fa-solid fa-book-bookmark"></i> Automated Onboarding Guide</h2>
-                                <p class="text-muted">AI-generated comprehensive documentation tailored for new contributors.</p>
-                            </div>
-                            <button id="generate-guide-btn" class="btn btn-primary">
-                                <i class="fa-solid fa-sparkles"></i> Generate Guide with Groq
-                            </button>
-                        </div>
-                        <hr class="divider">
-                        <div id="guide-content" class="markdown-body">
-                            <div class="empty-state large">
-                                <i class="fa-solid fa-file-invoice"></i>
-                                <h3>No Onboarding Guide Generated Yet</h3>
-                                <p>Click <strong>"Generate Guide with Groq"</strong> to analyze the repository structure and create an instant <code>ONBOARDING_GUIDE.md</code>.</p>
-                            </div>
+                <!-- ==========================================
+                     TAB 4: AI ASSISTANT
+                     ========================================== -->
+                <section id="assistant-tab" class="tab-pane">
+                    <div class="page-header">
+                        <div class="page-title-group">
+                            <h2>AI Codebase Assistant</h2>
+                            <p>Ask natural language questions about architecture, setup, and features with grounded source citations.</p>
                         </div>
                     </div>
-                </section>
 
-                <!-- TAB 3: DEPENDENCY GRAPH MAP -->
-                <section id="graph-tab" class="tab-pane">
-                    <div class="graph-container glass-panel">
-                        <!-- Controls & Toolbar -->
-                        <div class="graph-toolbar">
-                            <div class="toolbar-left">
-                                <h3 class="toolbar-title"><i class="fa-solid fa-network-wired"></i> Architecture Dependency Map</h3>
-                                <div class="filter-group">
-                                    <label><i class="fa-solid fa-filter"></i> View Mode:</label>
-                                    <select id="graph-filter-select" class="select-input">
-                                        <option value="all">All Files & Modules</option>
-                                        <option value="core">Core Modules (High Centrality)</option>
-                                        <option value="entry">Entry Points & Call Chains</option>
-                                        <option value="circular">Circular Dependencies Only</option>
-                                    </select>
-                                </div>
-                                <div class="filter-group">
-                                    <label><i class="fa-solid fa-sitemap"></i> Layout:</label>
-                                    <select id="graph-layout-select" class="select-input">
-                                        <option value="force">Physics Force-Directed</option>
-                                        <option value="tree">Hierarchical Tree</option>
-                                    </select>
-                                </div>
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="graph-external-chk" checked> Show External Packages
-                                </label>
-                            </div>
-                            <button id="refresh-graph-btn" class="btn btn-secondary btn-sm">
-                                <i class="fa-solid fa-rotate"></i> Reset View
-                            </button>
-                        </div>
-
-                        <!-- Canvas & Inspector Overlay Split -->
-                        <div class="graph-viewport">
-                            <div id="network-graph" class="network-canvas"></div>
-
-                            <!-- Node Detail Inspector Drawer -->
-                            <aside id="node-inspector" class="node-inspector glass-panel hidden">
-                                <div class="inspector-header">
-                                    <div>
-                                        <span class="badge badge-purple" id="inspector-node-type">Internal File</span>
-                                        <h3 id="inspector-node-title">select_file.py</h3>
-                                    </div>
-                                    <button id="close-inspector-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
-                                </div>
-                                <div class="inspector-body">
-                                    <div class="metric-cards">
-                                        <div class="metric-card">
-                                            <span class="metric-num" id="inspector-in-degree">0</span>
-                                            <span class="metric-label">Imported By (In-Degree)</span>
-                                        </div>
-                                        <div class="metric-card">
-                                            <span class="metric-num" id="inspector-out-degree">0</span>
-                                            <span class="metric-label">Imports (Out-Degree)</span>
-                                        </div>
-                                        <div class="metric-card">
-                                            <span class="metric-num" id="inspector-score">0.0</span>
-                                            <span class="metric-label">Activity Score</span>
-                                        </div>
-                                    </div>
-                                    <div class="inspector-section">
-                                        <h4><i class="fa-solid fa-code-branch"></i> Connected Dependencies</h4>
-                                        <div id="inspector-deps-list" class="tag-cloud"></div>
-                                    </div>
-                                    <div class="inspector-section">
-                                        <h4><i class="fa-solid fa-cube"></i> Exported Symbols</h4>
-                                        <div id="inspector-symbols-list" class="tag-cloud"></div>
-                                    </div>
-                                </div>
-                                <div class="inspector-footer">
-                                    <button id="jump-code-btn" class="btn btn-primary btn-sm btn-full">
-                                        <i class="fa-solid fa-code"></i> Jump to File in Code Explorer
-                                    </button>
-                                </div>
-                            </aside>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- TAB 4: AI ASSISTANT CHAT -->
-                <section id="chat-tab" class="tab-pane">
-                    <div class="chat-container glass-panel">
+                    <div class="chat-layout">
                         <div class="chat-header">
-                            <div class="assistant-avatar">🤖</div>
-                            <div>
-                                <h2>Onboarding Assistant</h2>
-                                <p class="text-muted">Ask questions about repository architecture, setup, or features.</p>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="brand-icon" style="width: 24px; height: 24px; font-size: 11px;"><i class="fa-solid fa-robot"></i></span>
+                                <span style="font-weight: 600;">Grounded Repository Assistant</span>
+                                <span class="badge badge-blue" id="chat-model-tag">Groq LLaMA 3.3</span>
                             </div>
+                            <button id="clear-chat-btn" class="btn btn-secondary btn-sm">
+                                <i class="fa-solid fa-trash-can"></i> Clear History
+                            </button>
                         </div>
-                        <div class="chat-messages" id="chat-messages">
-                            <div class="message assistant">
-                                <div class="msg-bubble">
-                                    Hello! 👋 I'm your Groq-powered OnBoarding Assistant. Ask me anything about this codebase, where to start, or how features work!
+
+                        <!-- Prompt suggestion chips -->
+                        <div class="chat-prompt-chips">
+                            <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Suggested:</span>
+                            <button type="button" class="prompt-chip" data-prompt="What are the main entry points and how does request execution flow through this codebase?">🚀 Explain entry flow</button>
+                            <button type="button" class="prompt-chip" data-prompt="How is authentication or session management handled across modules?">🔐 Authentication flow</button>
+                            <button type="button" class="prompt-chip" data-prompt="Which modules are most central and where should a new contributor start?">💡 Where to start contributing</button>
+                            <button type="button" class="prompt-chip" data-prompt="Are there any architectural risks, bottlenecks, or circular dependencies?">⚠️ Architectural risks</button>
+                        </div>
+
+                        <!-- Chat Messages Thread -->
+                        <div class="chat-thread" id="chat-messages">
+                            <div class="chat-message assistant">
+                                <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
+                                <div class="message-bubble">
+                                    Hello! 👋 I'm your OnBoarding Buddy Assistant powered by Groq and AST Code Intelligence.
+                                    <br><br>
+                                    Ask me anything about repository architecture, core modules, or how features work. Every answer includes <strong>grounded source citations</strong> you can click to jump straight to the code.
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Chat Input Bar -->
                         <form id="chat-form" class="chat-input-bar" action="javascript:void(0);" onsubmit="event.preventDefault();">
-                            <input type="text" id="chat-input" placeholder="Ask a question about this repository..." required>
-                            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> Send</button>
+                            <input type="text" id="chat-input" class="input-text" placeholder="Ask a question about this repository (e.g. How does error handling work?)..." required>
+                            <button type="submit" id="chat-send-btn" class="btn btn-primary">
+                                <i class="fa-solid fa-paper-plane"></i> Send
+                            </button>
                         </form>
                     </div>
                 </section>
 
-                <!-- TAB 5: AGENTIC REPOSITORY EXPLORER -->
-                <section id="agent-tab" class="tab-pane">
-                    <div class="agent-container glass-panel">
-                        <div class="agent-query-panel">
-                            <div>
-                                <h2><i class="fa-solid fa-route"></i> Agent Explorer</h2>
-                                <p class="text-muted">Ask a complex repository question and watch the read-only investigation trace.</p>
-                            </div>
-                            <form id="agent-form" class="agent-form" action="javascript:void(0);" onsubmit="event.preventDefault();">
-                                <input type="text" id="agent-input" placeholder="How does an API request flow through this repository?" required>
-                                <button type="submit" id="agent-explore-btn" class="btn btn-primary">
-                                    <i class="fa-solid fa-magnifying-glass-location"></i> Explore Repository
+                <!-- ==========================================
+                     TAB 5: CONTRIBUTIONS
+                     ========================================== -->
+                <section id="contributions-tab" class="tab-pane">
+                    <div class="page-header">
+                        <div class="page-title-group">
+                            <h2>Contribution & Audit Intelligence</h2>
+                            <p>Explore AST-detected open source opportunities, scan security risks, or map issues to code changes.</p>
+                        </div>
+                        <div class="page-actions">
+                            <button id="audit-repo-btn" class="btn btn-primary btn-sm">
+                                <i class="fa-solid fa-shield-halved"></i> Run Full Audit
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Severity Filter Chips -->
+                    <div class="filter-chip-group" style="margin-bottom: 16px;">
+                        <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Filter Severity:</span>
+                        <button type="button" class="filter-chip active" data-filter="all">All</button>
+                        <button type="button" class="filter-chip" data-filter="critical">Critical</button>
+                        <button type="button" class="filter-chip" data-filter="high">High</button>
+                        <button type="button" class="filter-chip" data-filter="medium">Medium</button>
+                        <button type="button" class="filter-chip" data-filter="low">Low</button>
+                    </div>
+
+                    <!-- Detected Opportunities Container -->
+                    <div id="audit-opportunities-container" style="margin-bottom: 24px;"></div>
+
+                    <!-- Issue-to-Code Mapping Planner -->
+                    <div class="dev-card" style="margin-bottom: 24px;">
+                        <div class="dev-card-header">
+                            <h3><i class="fa-solid fa-wand-magic-sparkles"></i> Issue-to-Code Impact Planner</h3>
+                            <span class="badge badge-blue">Blast Radius Calculator</span>
+                        </div>
+                        <div class="dev-card-body">
+                            <form id="contribution-form" action="javascript:void(0);" onsubmit="event.preventDefault();">
+                                <div style="margin-bottom: 12px;">
+                                    <label style="display:block; font-weight:600; font-size:12px; margin-bottom:4px;">Issue Title:</label>
+                                    <input type="text" id="issue-title" class="input-text" placeholder="e.g. Add support for connection pooling and retry exponential backoff" required>
+                                </div>
+                                <div style="margin-bottom: 12px;">
+                                    <label style="display:block; font-weight:600; font-size:12px; margin-bottom:4px;">Issue Description:</label>
+                                    <textarea id="issue-desc" class="textarea-input" style="height: 70px;" placeholder="Describe requirements, bug symptoms, or feature scope..."></textarea>
+                                </div>
+                                <div style="margin-bottom: 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                                    <span style="font-size: 11px; color: var(--text-muted);">Quick Presets:</span>
+                                    <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Fix bug in auth middleware token expiration" data-desc="Token validation fails to handle expired JWT tokens gracefully.">🔐 Fix Auth Expiration</button>
+                                    <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Add caching layer for repository index retrieval" data-desc="Improve performance by adding in-memory TTL caching for graph queries.">⚡ Add Caching Layer</button>
+                                    <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Refactor dependency graph traversal for cycle detection" data-desc="Optimize memory usage during circular dependency detection.">🔄 Refactor Cycle Detection</button>
+                                </div>
+                                <button type="submit" id="analyze-contrib-btn" class="btn btn-primary">
+                                    <i class="fa-solid fa-bullseye"></i> Analyze Contribution & Blast Radius
                                 </button>
                             </form>
                         </div>
-                        <div class="agent-results-grid">
-                            <aside class="agent-trace-panel">
-                                <h3><i class="fa-solid fa-list-check"></i> Agent Investigation</h3>
-                                <div id="agent-trace" class="agent-trace">
+                    </div>
+
+                    <!-- Contribution Plan Output -->
+                    <div id="contribution-content" class="dev-card">
+                        <div class="empty-state">
+                            <i class="fa-solid fa-code-pull-request"></i>
+                            <h3>No Issue Analyzed Yet</h3>
+                            <p>Enter an issue title & description above to calculate architectural blast radius and step-by-step implementation changes.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==========================================
+                     TAB 6: AGENT EXPLORER
+                     ========================================== -->
+                <section id="agent-tab" class="tab-pane">
+                    <div class="page-header">
+                        <div class="page-title-group">
+                            <h2>Agentic Repository Explorer</h2>
+                            <p>Autonomous read-only repository investigator executing tool calls to answer complex questions.</p>
+                        </div>
+                    </div>
+
+                    <!-- Query Box -->
+                    <div class="dev-card" style="margin-bottom: 20px;">
+                        <div class="dev-card-body">
+                            <form id="agent-form" style="display:flex; gap: 10px;" action="javascript:void(0);" onsubmit="event.preventDefault();">
+                                <input type="text" id="agent-input" class="input-text" placeholder="e.g. How does an API request flow from HTTP route to database query?" required>
+                                <button type="submit" id="agent-explore-btn" class="btn btn-primary">
+                                    <i class="fa-solid fa-route"></i> Explore Codebase
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- 2-Column Investigation View -->
+                    <div class="agent-grid">
+                        <!-- Left: Investigation Timeline -->
+                        <div class="dev-card">
+                            <div class="dev-card-header">
+                                <h3><i class="fa-solid fa-list-check"></i> Investigation Timeline</h3>
+                                <span class="badge" id="agent-step-count">0 Steps</span>
+                            </div>
+                            <div class="dev-card-body" id="agent-trace" style="max-height: 520px; overflow-y: auto;">
+                                <div class="empty-state">
+                                    <i class="fa-solid fa-route"></i>
+                                    <p>Run an exploration query to watch the agent tool execution trace in real time.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Grounded Answer & Evidence -->
+                        <div class="dev-card">
+                            <div class="dev-card-header">
+                                <h3><i class="fa-solid fa-compass"></i> Grounded Findings & Evidence</h3>
+                            </div>
+                            <div class="dev-card-body" style="max-height: 520px; overflow-y: auto;">
+                                <div id="agent-answer" class="markdown-body">
                                     <div class="empty-state">
-                                        <i class="fa-solid fa-route"></i>
-                                        <p>Run an exploration to see tool activity and observations.</p>
+                                        <i class="fa-solid fa-file-lines"></i>
+                                        <p>The structured answer and verified code evidence will appear here.</p>
                                     </div>
                                 </div>
-                            </aside>
-                            <section class="agent-answer-panel markdown-body">
-                                <div id="agent-answer" class="agent-answer">
-                                    <div class="empty-state large">
-                                        <i class="fa-solid fa-compass"></i>
-                                        <h3>No Agent Exploration Yet</h3>
-                                        <p>Ask a question above to collect repository evidence before generating an answer.</p>
-                                    </div>
-                                </div>
-                                <div id="agent-files" class="agent-detail-section"></div>
-                                <div id="agent-sources" class="agent-detail-section"></div>
-                                <div id="agent-summary" class="agent-detail-section"></div>
-                            </section>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- TAB 6: ISSUE CONTRIBUTION INTELLIGENCE -->
-                <section id="contribution-tab" class="tab-pane">
-                    <div class="guide-container glass-panel">
-                        <div class="guide-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-                            <div>
-                                <h2><i class="fa-solid fa-bullseye"></i> Issue-to-Code Contribution Intelligence</h2>
-                                <p class="text-muted">Analyze GitHub issues or scan repository AST for open source contribution opportunities, security risks, and refactoring PRs.</p>
-                            </div>
-                            <button id="audit-repo-btn" type="button" class="btn btn-secondary">
-                                <i class="fa-solid fa-shield-halved"></i> 🔍 Audit Repo & Find Opportunities
-                            </button>
-                        </div>
-                        <hr class="divider">
-
-                        <!-- Audit Opportunities Cards Container -->
-                        <div id="audit-opportunities-container" style="margin-bottom: 24px; display: none;"></div>
-
-                        <form id="contribution-form" style="margin-bottom: 20px;" action="javascript:void(0);" onsubmit="event.preventDefault();">
-                            <div style="margin-bottom: 12px;">
-                                <label style="display:block; font-weight:600; margin-bottom:4px;">Issue Title:</label>
-                                <input type="text" id="issue-title" class="select-input" style="width:100%; padding:10px;" placeholder="e.g. Add support for PostgreSQL connection pooling" required>
-                            </div>
-                            <div style="margin-bottom: 16px;">
-                                <label style="display:block; font-weight:600; margin-bottom:4px;">Issue Description:</label>
-                                <textarea id="issue-desc" class="select-input" style="width:100%; height:80px; padding:10px; font-family:inherit;" placeholder="e.g. The application should reuse database connections and allow pool size to be configured via environment variables."></textarea>
-                            </div>
-                            <div style="margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                                <span style="font-size: 12px; color: #94a3b8; font-weight: 500;">Quick Presets:</span>
-                                <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Fix bug in auth middleware token expiration" data-desc="Token validation in middleware fails to handle expired JWT tokens gracefully.">🔐 Fix Auth Expiration</button>
-                                <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Add caching layer for repository index retrieval" data-desc="Improve performance by adding in-memory TTL caching for graph queries.">⚡ Add Caching Layer</button>
-                                <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Refactor dependency graph traversal for cycle detection" data-desc="Optimize memory usage during circular dependency detection in large codebases.">🔄 Refactor Cycle Detection</button>
-                            </div>
-                            <button type="submit" id="analyze-contrib-btn" class="btn btn-primary">
-                                <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Contribution
-                            </button>
-                        </form>
-                        <div id="contribution-content" class="markdown-body">
-                            <div class="empty-state large">
-                                <i class="fa-solid fa-code-pull-request"></i>
-                                <h3>No Issue Analyzed Yet</h3>
-                                <p>Enter an issue title & description above and click <strong>"Analyze Contribution"</strong> to map features to code changes.</p>
+                                <div id="agent-files" style="margin-top: 16px;"></div>
+                                <div id="agent-sources" style="margin-top: 16px;"></div>
+                                <div id="agent-summary" style="margin-top: 16px;"></div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- TAB 7: PULL REQUEST INTELLIGENCE & CODE REVIEW -->
+                <!-- ==========================================
+                     TAB 7: PR REVIEW
+                     ========================================== -->
                 <section id="pr-tab" class="tab-pane">
-                    <div class="guide-container glass-panel">
-                        <div class="guide-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-                            <div>
-                                <h2><i class="fa-solid fa-code-pull-request"></i> Pull Request Intelligence & Code Review Agent</h2>
-                                <p class="text-muted">Analyze code changes, evaluate architectural blast radius, assess test impact, scan for diff-level security vulnerabilities, and generate automated code review comments.</p>
-                            </div>
-                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                <button id="pr-load-feature-btn" type="button" class="btn btn-secondary btn-sm">
-                                    <i class="fa-solid fa-plus-circle"></i> Sample Feature PR
-                                </button>
-                                <button id="pr-load-vuln-btn" type="button" class="btn btn-secondary btn-sm">
-                                    <i class="fa-solid fa-triangle-exclamation"></i> Sample Security Risk PR
-                                </button>
-                                <button id="pr-load-arch-btn" type="button" class="btn btn-secondary btn-sm">
-                                    <i class="fa-solid fa-sitemap"></i> Sample Arch Violation PR
-                                </button>
-                            </div>
+                    <div class="page-header">
+                        <div class="page-title-group">
+                            <h2>Pull Request Intelligence & Code Review</h2>
+                            <p>Evaluate blast radius, assess test impact, detect diff-level vulnerabilities, and generate automated review comments.</p>
                         </div>
-                        <hr class="divider">
+                        <div class="page-actions">
+                            <button id="pr-load-feature-btn" type="button" class="btn btn-secondary btn-sm">Sample Feature PR</button>
+                            <button id="pr-load-vuln-btn" type="button" class="btn btn-secondary btn-sm">Sample Security Risk PR</button>
+                            <button id="pr-load-arch-btn" type="button" class="btn btn-secondary btn-sm">Sample Arch Violation PR</button>
+                        </div>
+                    </div>
 
-                        <form id="pr-form" style="margin-bottom: 20px;" action="javascript:void(0);" onsubmit="event.preventDefault();">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                                <div>
-                                    <label style="display:block; font-weight:600; margin-bottom:4px;">PR Title (Optional):</label>
-                                    <input type="text" id="pr-title-input" class="select-input" style="width:100%; padding:9px;" placeholder="e.g. feat(auth): add token validation and caching">
+                    <!-- PR Form -->
+                    <div class="dev-card" style="margin-bottom: 20px;">
+                        <div class="dev-card-body">
+                            <form id="pr-form" action="javascript:void(0);" onsubmit="event.preventDefault();">
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                                    <div>
+                                        <label style="display:block; font-weight:600; font-size:12px; margin-bottom:4px;">PR Title (Optional):</label>
+                                        <input type="text" id="pr-title-input" class="input-text" placeholder="e.g. feat(auth): add token validation and caching">
+                                    </div>
+                                    <div>
+                                        <label style="display:block; font-weight:600; font-size:12px; margin-bottom:4px;">Upload Patch (.diff / .patch):</label>
+                                        <input type="file" id="pr-file-input" class="input-text" accept=".diff,.patch,.txt">
+                                    </div>
                                 </div>
-                                <div>
-                                    <label style="display:block; font-weight:600; margin-bottom:4px;">Upload Patch File (.diff / .patch):</label>
-                                    <input type="file" id="pr-file-input" class="select-input" accept=".diff,.patch,.txt" style="width:100%; padding:6px;">
+                                <div style="margin-bottom: 12px;">
+                                    <label style="display:block; font-weight:600; font-size:12px; margin-bottom:4px;">Unified Git Diff Patch:</label>
+                                    <textarea id="pr-diff-input" class="textarea-input" style="height: 120px; font-family: var(--font-mono); font-size: 11px;" placeholder="Paste git diff here (e.g. diff --git a/services/auth.py b/services/auth.py...)"></textarea>
                                 </div>
-                            </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="submit" id="pr-analyze-btn" class="btn btn-primary">
+                                        <i class="fa-solid fa-magnifying-glass-chart"></i> Analyze Pull Request
+                                    </button>
+                                    <button type="button" id="pr-review-btn" class="btn btn-secondary">
+                                        <i class="fa-solid fa-robot"></i> Run PR Review Agent
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
 
-                            <div style="margin-bottom: 14px;">
-                                <label style="display:block; font-weight:600; margin-bottom:4px;">Unified Git Diff Patch:</label>
-                                <textarea id="pr-diff-input" class="select-input" style="width:100%; height:140px; padding:10px; font-family: 'Fira Code', monospace; font-size: 13px;" placeholder="Paste git diff or unified patch here (e.g. diff --git a/services/auth.py b/services/auth.py...)"></textarea>
-                            </div>
+                    <!-- PR Results Area -->
+                    <div id="pr-results-container" style="display: none;">
+                        <div id="pr-metrics-bar" class="pr-metrics-grid"></div>
+                        <div id="pr-summaries" style="margin-bottom: 16px;"></div>
 
-                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                                <button type="submit" id="pr-analyze-btn" class="btn btn-primary">
-                                    <i class="fa-solid fa-magnifying-glass-chart"></i> Analyze Pull Request
-                                </button>
-                                <button type="button" id="pr-review-btn" class="btn btn-secondary">
-                                    <i class="fa-solid fa-robot"></i> Run PR Review Agent
-                                </button>
-                            </div>
-                        </form>
-
-                        <!-- PR Analysis Results Container -->
-                        <div id="pr-results-container" style="display: none;">
-                            <!-- Metrics Bar -->
-                            <div id="pr-metrics-bar" class="pr-metrics-grid" style="margin-bottom: 18px;"></div>
-
-                            <!-- Executive & Developer Summary -->
-                            <div id="pr-summaries" class="pr-summary-cards" style="margin-bottom: 20px;"></div>
-
-                            <!-- Detailed Sub-panels: Tabs -->
-                            <div class="pr-subtabs" style="margin-bottom: 15px; display: flex; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; flex-wrap: wrap;">
-                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn active" data-subtab="pr-sub-files"><i class="fa-solid fa-file-code"></i> Changed Files & Symbols</button>
-                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn" data-subtab="pr-sub-arch"><i class="fa-solid fa-sitemap"></i> Architecture Impact</button>
-                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn" data-subtab="pr-sub-tests"><i class="fa-solid fa-vial"></i> Test Impact & Scenarios</button>
-                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn" data-subtab="pr-sub-security"><i class="fa-solid fa-shield-halved"></i> Security Risks</button>
-                                <button type="button" class="btn btn-sm btn-secondary pr-subtab-btn" data-subtab="pr-sub-comments"><i class="fa-solid fa-comments"></i> Review Comments</button>
-                            </div>
-
-                            <!-- Subtab Content Panels -->
-                            <div id="pr-subtab-content">
-                                <div id="pr-sub-files" class="pr-subpanel active"></div>
-                                <div id="pr-sub-arch" class="pr-subpanel" style="display: none;"></div>
-                                <div id="pr-sub-tests" class="pr-subpanel" style="display: none;"></div>
-                                <div id="pr-sub-security" class="pr-subpanel" style="display: none;"></div>
-                                <div id="pr-sub-comments" class="pr-subpanel" style="display: none;"></div>
-                            </div>
+                        <div class="pr-subtabs">
+                            <button type="button" class="pr-subtab-btn active" data-subtab="pr-sub-files"><i class="fa-solid fa-file-code"></i> Changed Files & Symbols</button>
+                            <button type="button" class="pr-subtab-btn" data-subtab="pr-sub-arch"><i class="fa-solid fa-sitemap"></i> Architecture Impact</button>
+                            <button type="button" class="pr-subtab-btn" data-subtab="pr-sub-tests"><i class="fa-solid fa-vial"></i> Test Impact & Scenarios</button>
+                            <button type="button" class="pr-subtab-btn" data-subtab="pr-sub-security"><i class="fa-solid fa-shield-halved"></i> Security Risks</button>
+                            <button type="button" class="pr-subtab-btn" data-subtab="pr-sub-comments"><i class="fa-solid fa-comments"></i> Review Comments</button>
                         </div>
 
-                        <div id="pr-empty-state" class="empty-state large">
+                        <div id="pr-subtab-content">
+                            <div id="pr-sub-files" class="pr-subpanel active"></div>
+                            <div id="pr-sub-arch" class="pr-subpanel" style="display: none;"></div>
+                            <div id="pr-sub-tests" class="pr-subpanel" style="display: none;"></div>
+                            <div id="pr-sub-security" class="pr-subpanel" style="display: none;"></div>
+                            <div id="pr-sub-comments" class="pr-subpanel" style="display: none;"></div>
+                        </div>
+                    </div>
+
+                    <div id="pr-empty-state" class="dev-card">
+                        <div class="empty-state">
                             <i class="fa-solid fa-code-compare"></i>
                             <h3>No Pull Request Analyzed Yet</h3>
                             <p>Paste a unified git diff patch above or click one of the quick sample buttons to evaluate code changes, architecture impacts, and security vulnerabilities.</p>
                         </div>
                     </div>
                 </section>
-            </div>
-        </main>
+            </main>
+        </div>
     </div>
 
-    <!-- Script -->
+    <!-- ==========================================
+         MODAL 1: REPOSITORY SWITCHER
+         ========================================== -->
+    <div id="repo-modal" class="modal-backdrop">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3><i class="fa-brands fa-github"></i> Switch / Analyze Repository</h3>
+                <button type="button" id="close-repo-modal-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="repo-form" action="javascript:void(0);" onsubmit="event.preventDefault();">
+                    <div style="margin-bottom: 12px;">
+                        <label style="display:block; font-weight:600; font-size:12px; margin-bottom:4px;">GitHub URL or Local Folder Path:</label>
+                        <input type="text" id="repo-input" class="input-text" placeholder="e.g. https://github.com/psf/requests or c:\my-project" value="https://github.com/psf/requests" required>
+                    </div>
+
+                    <div style="margin-bottom: 16px;">
+                        <span style="font-size: 11px; color: var(--text-muted); font-weight: 500; display:block; margin-bottom: 6px;">Quick Samples:</span>
+                        <div style="display:flex; gap: 6px; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-secondary btn-sm sample-repo-btn" data-url="https://github.com/psf/requests">psf/requests (Python)</button>
+                            <button type="button" class="btn btn-secondary btn-sm sample-repo-btn" data-url="https://github.com/pallets/flask">pallets/flask (Python)</button>
+                            <button type="button" class="btn btn-secondary btn-sm sample-repo-btn" data-url="https://github.com/expressjs/express">expressjs/express (JS)</button>
+                            <button type="button" class="btn btn-secondary btn-sm sample-repo-btn" data-url=".">Current Workspace</button>
+                        </div>
+                    </div>
+
+                    <div id="repo-analyze-status" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; min-height: 18px;"></div>
+
+                    <div class="modal-footer" style="padding: 0; border: none; background: transparent;">
+                        <button type="button" id="cancel-repo-modal-btn" class="btn btn-secondary">Cancel</button>
+                        <button type="submit" id="analyze-btn" class="btn btn-primary">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Repository
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL 2: ONBOARDING GUIDE VIEWER
+         ========================================== -->
+    <div id="guide-modal" class="modal-backdrop">
+        <div class="modal-dialog" style="max-width: 780px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-book-bookmark"></i> Automated Onboarding Guide</h3>
+                <div style="display: flex; gap: 8px;">
+                    <button id="generate-guide-btn" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-sparkles"></i> Regenerate Guide
+                    </button>
+                    <button type="button" id="close-guide-modal-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div id="guide-content" class="markdown-body">
+                    <div class="empty-state">
+                        <i class="fa-solid fa-file-invoice"></i>
+                        <h3>No Onboarding Guide Generated Yet</h3>
+                        <p>Click <strong>"Regenerate Guide"</strong> to analyze repository structure and produce an instant ONBOARDING_GUIDE.md.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Controller -->
     <script src="/static/app.js"></script>
 </body>
 </html>
