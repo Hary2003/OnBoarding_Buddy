@@ -9,13 +9,24 @@ try:
 except ImportError:
     GROQ_SDK_AVAILABLE = False
 
-VALID_FALLBACK_MODELS = ["groq/compound", "groq/compound-mini", "qwen/qwen3.6-27b"]
+VALID_FALLBACK_MODELS = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant"
+]
 
 MODEL_ALIAS_MAP = {
-    "llama-3.3-70b-versatile": "groq/compound",
-    "llama-3.1-8b-instant": "groq/compound-mini",
-    "llama-3.3-70b": "groq/compound",
-    "qwen-2.5-coder-32b": "qwen/qwen3.6-27b"
+    "gpt-oss-120b": "openai/gpt-oss-120b",
+    "gpt-oss-20b": "openai/gpt-oss-20b",
+    "groq/compound": "openai/gpt-oss-120b",
+    "groq/compound-mini": "openai/gpt-oss-20b",
+    "llama-3.3-70b-versatile": "openai/gpt-oss-120b",
+    "llama-3.1-8b-instant": "openai/gpt-oss-20b",
+    "llama-3.3-70b": "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b": "qwen/qwen3.8-27b",
+    "qwen-2.5-coder-32b": "qwen/qwen3.8-27b"
 }
 
 GROUNDED_SYSTEM_PROMPT = (
