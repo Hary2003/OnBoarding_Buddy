@@ -147,6 +147,43 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/'/g, "&#039;");
     }
 
+    // Helper: Toast Notifications
+    function showToast(message, type = "info", title = null, duration = 4000) {
+        const container = document.getElementById("toast-container");
+        if (!container) return;
+
+        const toast = document.createElement("div");
+        toast.className = `toast toast-${type}`;
+
+        let icon = "fa-circle-info";
+        if (type === "success") icon = "fa-circle-check";
+        else if (type === "error") icon = "fa-circle-exclamation";
+        else if (type === "warning") icon = "fa-triangle-exclamation";
+
+        toast.innerHTML = `
+            <i class="fa-solid ${icon} toast-icon"></i>
+            <div class="toast-body">
+                ${title ? `<div class="toast-title">${escapeHtml(title)}</div>` : ""}
+                <div class="toast-message">${escapeHtml(message)}</div>
+            </div>
+            <button type="button" class="toast-close" aria-label="Dismiss">&times;</button>
+        `;
+
+        const closeBtn = toast.querySelector(".toast-close");
+        const dismiss = () => {
+            toast.classList.remove("show");
+            setTimeout(() => { if (toast.parentNode) toast.remove(); }, 250);
+        };
+        if (closeBtn) closeBtn.addEventListener("click", dismiss);
+
+        container.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add("show"));
+
+        if (duration > 0) {
+            setTimeout(dismiss, duration);
+        }
+    }
+
     // --- Tab Navigation Switcher ---
     function switchTab(tabId) {
         // Automatically close mobile sidebar drawer on navigation
@@ -321,7 +358,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (repoAnalyzeStatus) {
                 repoAnalyzeStatus.innerHTML = `<span style="color: var(--color-danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(err.message)}</span>`;
             }
-            alert(`Analysis error: ${err.message}`);
+            showToast(err.message, "error", "Repository Analysis Failed");
         } finally {
             if (analyzeBtn) {
                 analyzeBtn.disabled = false;
@@ -549,7 +586,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     overviewArchNarrative.innerHTML = marked.parse(narrative);
                 }
             } catch (err) {
-                alert(`Narrative error: ${err.message}`);
+                showToast(err.message, "error", "Narrative Error");
             } finally {
                 refreshNarrativeBtn.disabled = false;
                 refreshNarrativeBtn.innerHTML = `<i class="fa-solid fa-bolt"></i> Generate Groq Deep Narrative`;
@@ -987,7 +1024,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (jumpCodeBtn) {
         jumpCodeBtn.addEventListener("click", () => {
             if (!currentInspectorNode || currentInspectorNode.node_type === 'external_package') {
-                alert("Cannot open source code for external packages.");
+                showToast("Source code is not available locally for external packages.", "info");
                 return;
             }
             const match = currentSession?.files.find(f => f.relative_path === currentInspectorNode.path);
@@ -1563,7 +1600,7 @@ new file mode 100644
     async function runPR(endpoint, btnEl, btnLabel) {
         const diffText = (prDiffInput ? prDiffInput.value : "").trim();
         if (!diffText) {
-            alert("Please paste a git diff patch or load a sample PR first.");
+            showToast("Please paste a git diff patch or upload a .patch file first.", "warning");
             return;
         }
 
@@ -1592,7 +1629,7 @@ new file mode 100644
             const data = await res.json();
             renderPRResults(data);
         } catch (err) {
-            alert(`PR Error: ${err.message}`);
+            showToast(err.message, "error", "PR Review Error");
         } finally {
             if (btnEl) {
                 btnEl.disabled = false;
@@ -1784,7 +1821,7 @@ new file mode 100644
     if (generateGuideBtn) {
         generateGuideBtn.addEventListener("click", async () => {
             if (!currentSession) {
-                alert("Please analyze a repository first.");
+                showToast("Please analyze a repository first.", "warning");
                 return;
             }
 

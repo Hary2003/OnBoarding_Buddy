@@ -28,6 +28,7 @@
     <div class="app-shell">
         <!-- Top Navigation Bar -->
         <header class="topbar">
+            <div class="topbar-left">
                 <!-- Mobile Navigation Toggle -->
                 <button type="button" id="mobile-nav-toggle" class="btn-icon mobile-nav-toggle" aria-label="Toggle navigation menu" title="Open navigation">
                     <i class="fa-solid fa-bars"></i>
@@ -51,7 +52,7 @@
                 <!-- Groq AI Status Indicator -->
                 <div class="status-indicator" id="groq-status">
                     <span class="status-dot green"></span>
-                    <span>Connecting Groq AI...</span>
+                    <span>Groq AI Connected</span>
                 </div>
 
                 <!-- Quick Onboarding Guide Trigger -->
@@ -815,6 +816,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Global Toast Notifications Container -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
     <!-- Application Controller -->
     <script src="/static/app.js"></script>
