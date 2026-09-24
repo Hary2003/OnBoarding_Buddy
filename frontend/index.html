@@ -28,7 +28,11 @@
     <div class="app-shell">
         <!-- Top Navigation Bar -->
         <header class="topbar">
-            <div class="topbar-left">
+                <!-- Mobile Navigation Toggle -->
+                <button type="button" id="mobile-nav-toggle" class="btn-icon mobile-nav-toggle" aria-label="Toggle navigation menu" title="Open navigation">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+
                 <div class="brand-badge">
                     <span class="brand-icon"><i class="fa-solid fa-compass"></i></span>
                     <span>OnBoarding Buddy</span>
@@ -64,8 +68,17 @@
 
         <!-- Main Body Area -->
         <div class="workspace-body">
+            <!-- Mobile Sidebar Backdrop Overlay -->
+            <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
             <!-- Compact Developer Sidebar -->
-            <aside class="sidebar">
+            <aside class="sidebar" id="app-sidebar">
+                <div class="sidebar-header-mobile">
+                    <span>Navigation</span>
+                    <button type="button" id="sidebar-close-btn" class="btn-icon" aria-label="Close navigation">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
                 <div class="sidebar-nav">
                     <span class="nav-section-title">Navigation</span>
                     <button class="nav-item active" data-tab="overview-tab">

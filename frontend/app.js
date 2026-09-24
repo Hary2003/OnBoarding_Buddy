@@ -18,6 +18,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const footerSessionName = document.getElementById("footer-session-name");
     const footerIndexedTime = document.getElementById("footer-indexed-time");
 
+    // Mobile Navigation Elements
+    const mobileNavToggle = document.getElementById("mobile-nav-toggle");
+    const appSidebar = document.getElementById("app-sidebar");
+    const sidebarBackdrop = document.getElementById("sidebar-backdrop");
+    const sidebarCloseBtn = document.getElementById("sidebar-close-btn");
+
     // Modals
     const repoModal = document.getElementById("repo-modal");
     const closeRepoModalBtn = document.getElementById("close-repo-modal-btn");
@@ -143,6 +149,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Tab Navigation Switcher ---
     function switchTab(tabId) {
+        // Automatically close mobile sidebar drawer on navigation
+        if (appSidebar) appSidebar.classList.remove("open");
+        if (sidebarBackdrop) sidebarBackdrop.classList.remove("active");
+
         navItems.forEach(btn => {
             if (btn.dataset.tab === tabId) {
                 btn.classList.add("active");
@@ -177,6 +187,26 @@ document.addEventListener("DOMContentLoaded", () => {
     navItems.forEach(btn => {
         btn.addEventListener("click", () => switchTab(btn.dataset.tab));
     });
+
+    // Mobile Sidebar Drawer Toggles
+    if (mobileNavToggle) {
+        mobileNavToggle.addEventListener("click", () => {
+            if (appSidebar) appSidebar.classList.toggle("open");
+            if (sidebarBackdrop) sidebarBackdrop.classList.toggle("active");
+        });
+    }
+    if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener("click", () => {
+            if (appSidebar) appSidebar.classList.remove("open");
+            sidebarBackdrop.classList.remove("active");
+        });
+    }
+    if (sidebarCloseBtn) {
+        sidebarCloseBtn.addEventListener("click", () => {
+            if (appSidebar) appSidebar.classList.remove("open");
+            if (sidebarBackdrop) sidebarBackdrop.classList.remove("active");
+        });
+    }
 
     if (viewGraphJumpBtn) {
         viewGraphJumpBtn.addEventListener("click", () => switchTab("architecture-tab"));
