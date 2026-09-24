@@ -596,11 +596,9 @@
                                     <label style="display:block; font-weight:600; font-size:12px; margin-bottom:4px;">Issue Description:</label>
                                     <textarea id="issue-desc" class="textarea-input" style="height: 70px;" placeholder="Describe requirements, bug symptoms, or feature scope..."></textarea>
                                 </div>
-                                <div style="margin-bottom: 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
-                                    <span style="font-size: 11px; color: var(--text-muted);">Quick Presets:</span>
-                                    <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Fix bug in auth middleware token expiration" data-desc="Token validation fails to handle expired JWT tokens gracefully.">🔐 Fix Auth Expiration</button>
-                                    <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Add caching layer for repository index retrieval" data-desc="Improve performance by adding in-memory TTL caching for graph queries.">⚡ Add Caching Layer</button>
-                                    <button type="button" class="btn btn-secondary btn-sm preset-issue-btn" data-title="Refactor dependency graph traversal for cycle detection" data-desc="Optimize memory usage during circular dependency detection.">🔄 Refactor Cycle Detection</button>
+                                <div class="form-helper-row" style="margin-bottom: 14px; font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+                                    <i class="fa-solid fa-circle-info" style="color: var(--accent-primary);"></i>
+                                    <span>Calculates direct file blast radius, downstream callers, and test files impacted by your planned change.</span>
                                 </div>
                                 <button type="submit" id="analyze-contrib-btn" class="btn btn-primary">
                                     <i class="fa-solid fa-bullseye"></i> Analyze Contribution & Blast Radius
@@ -687,11 +685,6 @@
                             <h2>Pull Request Intelligence & Code Review</h2>
                             <p>Evaluate blast radius, assess test impact, detect diff-level vulnerabilities, and generate automated review comments.</p>
                         </div>
-                        <div class="page-actions">
-                            <button id="pr-load-feature-btn" type="button" class="btn btn-secondary btn-sm">Sample Feature PR</button>
-                            <button id="pr-load-vuln-btn" type="button" class="btn btn-secondary btn-sm">Sample Security Risk PR</button>
-                            <button id="pr-load-arch-btn" type="button" class="btn btn-secondary btn-sm">Sample Arch Violation PR</button>
-                        </div>
                     </div>
 
                     <!-- PR Form -->
@@ -750,7 +743,7 @@
                         <div class="empty-state">
                             <i class="fa-solid fa-code-compare"></i>
                             <h3>No Pull Request Analyzed Yet</h3>
-                            <p>Paste a unified git diff patch above or click one of the quick sample buttons to evaluate code changes, architecture impacts, and security vulnerabilities.</p>
+                            <p>Paste a unified git diff patch above or upload a .patch file to evaluate code changes, architecture impacts, test coverage, and security risks.</p>
                         </div>
                     </div>
                 </section>
@@ -775,7 +768,7 @@
                     </div>
 
                     <div style="margin-bottom: 16px;">
-                        <span style="font-size: 11px; color: var(--text-muted); font-weight: 500; display:block; margin-bottom: 6px;">Quick Samples:</span>
+                        <span style="font-size: 11px; color: var(--text-muted); font-weight: 500; display:block; margin-bottom: 6px;">Suggested Repositories:</span>
                         <div style="display:flex; gap: 6px; flex-wrap: wrap;">
                             <button type="button" class="btn btn-secondary btn-sm sample-repo-btn" data-url="https://github.com/psf/requests">psf/requests (Python)</button>
                             <button type="button" class="btn btn-secondary btn-sm sample-repo-btn" data-url="https://github.com/pallets/flask">pallets/flask (Python)</button>

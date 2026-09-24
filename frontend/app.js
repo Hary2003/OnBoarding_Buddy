@@ -257,10 +257,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch("/api/health");
             const data = await res.json();
             if (data.groq_configured) {
-                groqStatus.innerHTML = `<span class="status-dot green"></span> <span>Groq AI Connected (${data.groq_model || 'LLaMA 3.3'})</span>`;
+                groqStatus.innerHTML = `<span class="status-dot green"></span> <span>${data.groq_model || 'Groq AI Ready'}</span>`;
                 if (chatModelTag) chatModelTag.textContent = data.groq_model || "Groq LLaMA 3.3";
             } else {
-                groqStatus.innerHTML = `<span class="status-dot amber"></span> <span>Groq API Key Missing (.env)</span>`;
+                groqStatus.innerHTML = `<span class="status-dot amber"></span> <span>Groq Key Needed</span>`;
             }
         } catch (err) {
             groqStatus.innerHTML = `<span class="status-dot red"></span> <span>Backend Offline</span>`;
