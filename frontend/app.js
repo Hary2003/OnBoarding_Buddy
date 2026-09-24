@@ -354,6 +354,7 @@ document.addEventListener("DOMContentLoaded", () => {
             closeRepoModal();
 
             if (repoAnalyzeStatus) repoAnalyzeStatus.innerHTML = "";
+            showToast(`Repository "${repoIndex.repo_name}" successfully indexed.`, "success", "Repository Ready");
         } catch (err) {
             if (repoAnalyzeStatus) {
                 repoAnalyzeStatus.innerHTML = `<span style="color: var(--color-danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(err.message)}</span>`;
@@ -576,6 +577,15 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!currentSession) return;
             refreshNarrativeBtn.disabled = true;
             refreshNarrativeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating Narrative...`;
+            if (overviewArchNarrative) {
+                overviewArchNarrative.innerHTML = `
+                    <div class="skeleton-shimmer">
+                        <div class="skeleton-line full"></div>
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line medium"></div>
+                    </div>
+                `;
+            }
 
             try {
                 const res = await fetch("/api/architecture?session_id=default&use_llm=true");
@@ -585,7 +595,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (narrative && overviewArchNarrative) {
                     overviewArchNarrative.innerHTML = marked.parse(narrative);
                 }
+                showToast("Deep architecture narrative generated", "success");
             } catch (err) {
+                if (overviewArchNarrative) {
+                    overviewArchNarrative.innerHTML = `
+                        <div class="alert-banner error">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <div>${escapeHtml(err.message)}</div>
+                        </div>
+                    `;
+                }
                 showToast(err.message, "error", "Narrative Error");
             } finally {
                 refreshNarrativeBtn.disabled = false;
@@ -717,10 +736,38 @@ document.addEventListener("DOMContentLoaded", () => {
         repoSearch.addEventListener("input", (e) => {
             const query = e.target.value.toLowerCase().trim();
             const nodes = treeContainer.querySelectorAll(".tree-node");
+            let visibleCount = 0;
             nodes.forEach(node => {
                 const name = node.dataset.filename || "";
-                node.style.display = name.includes(query) ? "flex" : "none";
+                const matches = name.includes(query);
+                node.style.display = matches ? "flex" : "none";
+                if (matches) visibleCount++;
             });
+
+            let emptyMsg = treeContainer.querySelector(".tree-empty-search");
+            if (visibleCount === 0 && query) {
+                if (!emptyMsg) {
+                    emptyMsg = document.createElement("div");
+                    emptyMsg.className = "empty-state tree-empty-search";
+                    emptyMsg.style.padding = "24px 12px";
+                    emptyMsg.innerHTML = `
+                        <i class="fa-solid fa-magnifying-glass" style="font-size: 20px;"></i>
+                        <h3 style="font-size: 13px;">No matching files</h3>
+                        <p style="font-size: 11px;">No files match "${escapeHtml(query)}"</p>
+                        <button type="button" class="btn btn-secondary btn-sm" id="clear-search-btn" style="margin-top: 8px;">Clear search</button>
+                    `;
+                    treeContainer.appendChild(emptyMsg);
+                    const clearBtn = emptyMsg.querySelector("#clear-search-btn");
+                    if (clearBtn) {
+                        clearBtn.addEventListener("click", () => {
+                            repoSearch.value = "";
+                            repoSearch.dispatchEvent(new Event("input"));
+                        });
+                    }
+                }
+            } else if (emptyMsg) {
+                emptyMsg.remove();
+            }
         });
     }
 
@@ -795,6 +842,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!codeContent) return;
             navigator.clipboard.writeText(codeContent.textContent).then(() => {
                 copyCodeBtn.innerHTML = `<i class="fa-solid fa-check" style="color: var(--color-success);"></i>`;
+                showToast("Code copied to clipboard", "success");
                 setTimeout(() => {
                     copyCodeBtn.innerHTML = `<i class="fa-regular fa-copy"></i>`;
                 }, 1500);
@@ -809,7 +857,14 @@ document.addEventListener("DOMContentLoaded", () => {
             summarizeBtn.disabled = true;
             summarizeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing...`;
             if (summaryText) {
-                summaryText.innerHTML = `<p class="placeholder-text"><i class="fa-solid fa-spinner fa-spin"></i> Asking Groq AI to analyze file architecture & purpose...</p>`;
+                summaryText.innerHTML = `
+                    <div class="skeleton-shimmer">
+                        <div class="skeleton-line full"></div>
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line full"></div>
+                    </div>
+                `;
             }
 
             try {
@@ -825,8 +880,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (!res.ok) throw new Error("Summarization failed.");
                 const data = await res.json();
                 if (summaryText) summaryText.innerHTML = marked.parse(data.summary);
+                showToast("File summary generated", "success");
             } catch (err) {
-                if (summaryText) summaryText.innerHTML = `<p style="color: var(--color-danger);">❌ ${err.message}</p>`;
+                if (summaryText) {
+                    summaryText.innerHTML = `
+                        <div class="alert-banner error">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <div>
+                                <strong>Summarization Failed</strong>
+                                <div>${escapeHtml(err.message)}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+                showToast(err.message, "error", "Summarize Error");
             } finally {
                 summarizeBtn.disabled = false;
                 summarizeBtn.innerHTML = `<i class="fa-solid fa-bolt"></i> Summarize`;
@@ -1107,7 +1174,14 @@ document.addEventListener("DOMContentLoaded", () => {
             appendChatMessage("user", question);
             if (chatInput) chatInput.value = "";
 
-            const assistantMsgEl = appendChatMessage("assistant", `<i class="fa-solid fa-spinner fa-spin"></i> Thinking & retrieving repository context...`);
+            const assistantMsgEl = appendChatMessage("assistant", `
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <div class="typing-indicator">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <span style="font-size: 11px; color: var(--text-muted);">Thinking & retrieving repository context...</span>
+                </div>
+            `);
 
             try {
                 const res = await fetch("/api/chat", {
@@ -1155,7 +1229,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
             } catch (err) {
                 const bubble = assistantMsgEl.querySelector(".message-bubble");
-                bubble.innerHTML = `<span style="color: var(--color-danger);">❌ ${escapeHtml(err.message)}</span>`;
+                bubble.innerHTML = `
+                    <div class="alert-banner error" style="margin: 0; padding: 8px 10px;">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <div>
+                            <strong>Assistant Error</strong>
+                            <div style="font-size: 11px; margin-top: 2px;">${escapeHtml(err.message)}</div>
+                        </div>
+                    </div>
+                `;
+                showToast(err.message, "error", "Assistant Error");
             }
         });
     }
@@ -1202,6 +1285,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         </div>
                     `;
                 }
+                showToast("Chat history cleared", "info");
             } catch (err) {
                 console.warn("Clear chat error:", err);
             }
@@ -1610,6 +1694,22 @@ new file mode 100644
             btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing Diff...`;
         }
 
+        if (prEmptyState) prEmptyState.style.display = "none";
+        if (prResultsContainer) {
+            prResultsContainer.style.display = "block";
+            if (prMetricsBar) {
+                prMetricsBar.innerHTML = `
+                    <div class="stat-card"><div class="skeleton-line short"></div><div class="skeleton-line medium" style="margin-top:8px;"></div></div>
+                    <div class="stat-card"><div class="skeleton-line short"></div><div class="skeleton-line medium" style="margin-top:8px;"></div></div>
+                    <div class="stat-card"><div class="skeleton-line short"></div><div class="skeleton-line medium" style="margin-top:8px;"></div></div>
+                    <div class="stat-card"><div class="skeleton-line short"></div><div class="skeleton-line medium" style="margin-top:8px;"></div></div>
+                `;
+            }
+            if (prSummaries) {
+                prSummaries.innerHTML = `<div class="skeleton-shimmer"><div class="skeleton-line full"></div><div class="skeleton-line long"></div></div>`;
+            }
+        }
+
         try {
             const res = await fetch(endpoint, {
                 method: "POST",
@@ -1628,7 +1728,19 @@ new file mode 100644
 
             const data = await res.json();
             renderPRResults(data);
+            showToast("Pull request analysis complete", "success");
         } catch (err) {
+            if (prResultsContainer) {
+                prResultsContainer.innerHTML = `
+                    <div class="alert-banner error" style="margin-top: 16px;">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <div>
+                            <strong>Pull Request Review Failed</strong>
+                            <div style="font-size: 11px; margin-top: 2px;">${escapeHtml(err.message)}</div>
+                        </div>
+                    </div>
+                `;
+            }
             showToast(err.message, "error", "PR Review Error");
         } finally {
             if (btnEl) {
@@ -1828,7 +1940,16 @@ new file mode 100644
             generateGuideBtn.disabled = true;
             generateGuideBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating Guide...`;
             if (guideContent) {
-                guideContent.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><h3>Building your comprehensive Onboarding Guide with Groq AI...</h3></div>`;
+                guideContent.innerHTML = `
+                    <div class="skeleton-shimmer" style="padding: 16px;">
+                        <div class="skeleton-line full" style="height: 18px; margin-bottom: 8px;"></div>
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line full" style="margin-top: 14px;"></div>
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line medium"></div>
+                    </div>
+                `;
             }
 
             try {
@@ -1841,10 +1962,20 @@ new file mode 100644
                 if (!res.ok) throw new Error("Guide generation failed.");
                 const data = await res.json();
                 if (guideContent) guideContent.innerHTML = marked.parse(data.guide);
+                showToast("Onboarding guide generated successfully", "success");
             } catch (err) {
                 if (guideContent) {
-                    guideContent.innerHTML = `<div class="empty-state"><p style="color: var(--color-danger);">❌ ${escapeHtml(err.message)}</p></div>`;
+                    guideContent.innerHTML = `
+                        <div class="alert-banner error">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <div>
+                                <strong>Guide Generation Failed</strong>
+                                <div>${escapeHtml(err.message)}</div>
+                            </div>
+                        </div>
+                    `;
                 }
+                showToast(err.message, "error", "Guide Generation Failed");
             } finally {
                 generateGuideBtn.disabled = false;
                 generateGuideBtn.innerHTML = `<i class="fa-solid fa-sparkles"></i> Regenerate Guide`;
