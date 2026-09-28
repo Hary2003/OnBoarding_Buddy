@@ -1,6 +1,13 @@
-# Environment variables & secrets
+# Environment variables & secrets (Strictly local development - NEVER commit secrets to git)
 .env
+.env.*
 *.env
+!.env.example
+*.key
+*.pem
+*.secret
+*.cert
+secrets/
 
 # Python cache & build outputs
 __pycache__/
