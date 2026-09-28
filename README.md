@@ -431,21 +431,52 @@ pip install -r requirements.txt
 
 ## 4. Configure environment variables
 
-Create a `.env` file:
+### Local Development
+Copy `.env.example` to `.env` and set your local keys:
 
-```env
-GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=llama-3.3-70b-versatile
+```bash
+cp .env.example .env
 ```
 
-**Never commit `.env` or API keys to GitHub.**
+```env
+ENVIRONMENT=development
+DEBUG=true
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=openai/gpt-oss-120b
+HOST=127.0.0.1
+PORT=8000
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000,http://localhost:5173,http://127.0.0.1:5173
+```
 
-Use `.env.example` for public configuration documentation.
+> **Security Rule**: The `.env` file is strictly for local development and is ignored by `.gitignore`. **Never commit `.env` or API keys to Git.**
+
+### Production Deployment & Secrets Management
+
+In production (e.g. AWS, Render, Railway, Fly.io, Kubernetes, Docker):
+1. **No `.env` file**: Do not mount or bundle a `.env` file. The application automatically falls back to process environment variables.
+2. **Groq API Key as Deployment Secret**: Store `GROQ_API_KEY` securely in your platform's secret manager (e.g., Kubernetes Secret, AWS Secrets Manager, GitHub Deployment Secrets).
+3. **Production Environment Variables**:
+   - `ENVIRONMENT=production`
+   - `DEBUG=false` (disables internal stack trace exposure and auto-reload)
+   - `HOST=0.0.0.0`
+   - `PORT=8000`
+   - `CORS_ALLOWED_ORIGINS=https://app.yourdomain.com` (strictly restrict allowed origins; wildcard with credentials is blocked in production)
+   - `ENABLE_DOCS=false` (hides Swagger/Redoc endpoints in production)
+   - `LOG_LEVEL=INFO`
+4. **Secure Error Responses**: All unhandled 5xx exceptions and system errors return sanitized JSON responses (`{"detail": "An internal server error occurred."}`) rather than leaking server filepaths or tracebacks.
 
 ## 5. Start the server
 
+### Development Mode
 ```bash
-uvicorn server:app --reload
+python app.py
+# or: uvicorn server:app --reload
+```
+
+### Production Mode
+```bash
+python app.py
+# or: uvicorn server:app --host 0.0.0.0 --port 8000 --no-reload
 ```
 
 Open:
