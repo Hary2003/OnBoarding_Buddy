@@ -88,15 +88,16 @@ class RepositoryPersistenceService:
         """Persists a PR review analysis in PostgreSQL."""
         try:
             with get_db_context() as db:
-                findings_json = [f.model_dump() for f in review.security_findings]
                 full_json = review.model_dump()
+                exec_sum = review.summary.executive_summary if review.summary else ""
+                dev_sum = review.summary.developer_summary if review.summary else ""
                 record = PRReviewRecord(
                     session_id=session_id,
                     title=title or "Pull Request Review",
-                    risk_level=review.risk_level,
-                    executive_summary=review.executive_summary,
-                    developer_summary=review.developer_summary,
-                    security_findings=findings_json,
+                    verdict=review.verdict,
+                    executive_summary=exec_sum,
+                    developer_summary=dev_sum,
+                    risks_count=len(review.risks),
                     full_analysis=full_json
                 )
                 db.add(record)
@@ -112,9 +113,12 @@ class RepositoryPersistenceService:
                 record = AuditReportRecord(
                     session_id=session_id,
                     repo_name=report.repo_name,
-                    overall_score=report.overall_score,
-                    health_grade=report.health_grade,
-                    opportunities_count=len(report.opportunities),
+                    total_opportunities=report.total_opportunities,
+                    critical_count=report.critical_count,
+                    high_count=report.high_count,
+                    medium_count=report.medium_count,
+                    low_count=report.low_count,
+                    summary_narrative=report.summary_narrative,
                     report_data=report.model_dump()
                 )
                 db.add(record)

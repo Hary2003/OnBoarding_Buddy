@@ -454,16 +454,49 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhos
 
 In production (e.g. AWS, Render, Railway, Fly.io, Kubernetes, Docker):
 1. **No `.env` file**: Do not mount or bundle a `.env` file. The application automatically falls back to process environment variables.
-2. **Groq API Key as Deployment Secret**: Store `GROQ_API_KEY` securely in your platform's secret manager (e.g., Kubernetes Secret, AWS Secrets Manager, GitHub Deployment Secrets).
+2. **Secrets as Deployment Secrets**: Store `GROQ_API_KEY` and `DATABASE_URL` securely in your platform's secret manager (e.g., Kubernetes Secret, AWS Secrets Manager, GitHub Deployment Secrets).
 3. **Production Environment Variables**:
    - `ENVIRONMENT=production`
    - `DEBUG=false` (disables internal stack trace exposure and auto-reload)
    - `HOST=0.0.0.0`
    - `PORT=8000`
+   - `DATABASE_URL=postgresql://user:pass@ep-xyz-pooler.neon.tech/neondb?sslmode=require`
+   - `DB_POOL_SIZE=10`, `DB_MAX_OVERFLOW=20`, `DB_POOL_RECYCLE=300`
    - `CORS_ALLOWED_ORIGINS=https://app.yourdomain.com` (strictly restrict allowed origins; wildcard with credentials is blocked in production)
    - `ENABLE_DOCS=false` (hides Swagger/Redoc endpoints in production)
    - `LOG_LEVEL=INFO`
 4. **Secure Error Responses**: All unhandled 5xx exceptions and system errors return sanitized JSON responses (`{"detail": "An internal server error occurred."}`) rather than leaking server filepaths or tracebacks.
+
+---
+
+# 🐘 PostgreSQL Persistence & Database Architecture
+
+OnBoarding Buddy uses **Neon Serverless PostgreSQL** for persistent, scalable state across server restarts and horizontally scaled replicas:
+
+### 1. Persistent Data Entities
+- **`repositories`**: Stores parsed AST indices, language breakdowns, module centrality metrics, and architecture summaries.
+- **`conversation_turns`**: Stores multi-turn chat sessions and evidence source attributions.
+- **`pr_reviews`**: Stores static diff security audits, risks, and inline comments.
+- **`audit_reports`**: Stores repository health and contribution intelligence opportunity audits.
+
+### 2. Connection Pooling & Serverless Optimization
+- `pool_pre_ping=True`: Proactively verifies connection liveness, gracefully handling Neon's automatic scale-to-zero compute wakeups.
+- `pool_size=10`, `max_overflow=20`: Manages concurrent client requests through pgBouncer/pooler endpoints.
+- `pool_recycle=300`: Periodically recycles stale serverless connections.
+
+### 3. Proper Indexes
+- B-tree indexes on `session_id`, `repo_name`, `created_at`, and `updated_at`.
+- Composite index `(session_id, updated_at)` for high-throughput session lookups.
+
+### 4. Backup & Disaster Recovery Strategy
+- **Neon Point-in-Time Recovery (PITR)**: Provides continuous automated backup retention with recovery to any second.
+- **Instant Branching**: Enables zero-copy database branches for staging, migrations, and pre-deployment testing.
+- **Logical Backups**:
+  ```bash
+  pg_dump "$DATABASE_URL" -F c -b -v -f onboarding_buddy_backup.dump
+  ```
+
+---
 
 ## 5. Start the server
 
