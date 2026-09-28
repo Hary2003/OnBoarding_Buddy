@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlsplit
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -41,7 +42,9 @@ class TestPostgresPersistence(TestCase):
         self.assertGreaterEqual(health["latency_ms"], 0.0)
         self.assertIn("provider", health)
         # Verify no credentials leaked
-        self.assertNotIn("npg_Crm5wavGTc1Q", str(health))
+        db_pass = getattr(urlsplit(settings.DATABASE_URL), "password", None)
+        if db_pass:
+            self.assertNotIn(db_pass, str(health))
         self.assertIn("****", health.get("database", ""))
 
     def test_02_connection_pooling_configuration(self):
@@ -160,7 +163,9 @@ class TestPostgresPersistence(TestCase):
         data = res.json()
         self.assertIn("database", data)
         self.assertEqual(data["database"]["status"], "healthy")
-        self.assertNotIn("npg_Crm5wavGTc1Q", res.text)
+        db_pass = getattr(urlsplit(settings.DATABASE_URL), "password", None)
+        if db_pass:
+            self.assertNotIn(db_pass, res.text)
 
 
 if __name__ == "__main__":
