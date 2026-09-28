@@ -1,4 +1,5 @@
 import re
+import logging
 from typing import List, Dict, Set, Tuple, Optional, Any
 from models.repository_index import (
     RepositoryIndex, FileInfo, Symbol, RetrievedContextPayload,
@@ -6,6 +7,10 @@ from models.repository_index import (
 )
 from services.retrieval_service import retrieval_engine
 from services.groq_service import groq_service
+from database import get_db_context
+from models.db_models import ConversationTurnRecord
+
+logger = logging.getLogger("onboarding_buddy.conversation")
 
 class ConversationService:
     def __init__(self):
@@ -13,11 +18,24 @@ class ConversationService:
         self._session_histories: Dict[str, List[Dict[str, str]]] = {}
 
     def get_history(self, session_id: str = "default") -> List[Dict[str, str]]:
-        """Returns multi-turn conversation history for a given session."""
+        """Returns multi-turn conversation history for a given session, restoring from DB if needed."""
+        if session_id not in self._session_histories:
+            try:
+                with get_db_context() as db:
+                    records = db.query(ConversationTurnRecord).filter(
+                        ConversationTurnRecord.session_id == session_id
+                    ).order_by(ConversationTurnRecord.created_at.asc()).all()[-10:]
+                    if records:
+                        self._session_histories[session_id] = [
+                            {"role": r.role, "content": r.content} for r in records
+                        ]
+            except Exception as e:
+                logger.debug(f"Could not load conversation history from DB: {e}")
+
         return self._session_histories.get(session_id, [])
 
-    def add_turn(self, session_id: str, role: str, content: str):
-        """Appends a turn to session history, enforcing a maximum history limit of 10 turns."""
+    def add_turn(self, session_id: str, role: str, content: str, attributions: Optional[List[Dict]] = None):
+        """Appends a turn to session history, enforcing 10-turn limit and persisting to PostgreSQL."""
         if session_id not in self._session_histories:
             self._session_histories[session_id] = []
         self._session_histories[session_id].append({"role": role, "content": content})
@@ -25,12 +43,34 @@ class ConversationService:
         if len(self._session_histories[session_id]) > 10:
             self._session_histories[session_id] = self._session_histories[session_id][-10:]
 
+        try:
+            with get_db_context() as db:
+                record = ConversationTurnRecord(
+                    session_id=session_id,
+                    role=role,
+                    content=content,
+                    attributions=attributions or []
+                )
+                db.add(record)
+        except Exception as e:
+            logger.debug(f"Could not persist conversation turn to DB: {e}")
+
     def clear_history(self, session_id: str = "default") -> bool:
-        """Clears conversation history for a session."""
+        """Clears conversation history for a session from memory and database."""
+        cleared = False
         if session_id in self._session_histories:
             del self._session_histories[session_id]
-            return True
-        return False
+            cleared = True
+        try:
+            with get_db_context() as db:
+                deleted_count = db.query(ConversationTurnRecord).filter(
+                    ConversationTurnRecord.session_id == session_id
+                ).delete()
+                if deleted_count > 0:
+                    cleared = True
+        except Exception as e:
+            logger.debug(f"Could not delete conversation history from DB: {e}")
+        return cleared
 
     def extract_source_attributions(self, retrieved_payload: RetrievedContextPayload, answer_text: str, repo_index: Optional[RepositoryIndex] = None) -> List[SourceAttribution]:
         """Extracts structured SourceAttribution items connecting answer text to retrieved context."""

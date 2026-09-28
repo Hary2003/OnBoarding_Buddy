@@ -9,6 +9,8 @@ from pydantic import BaseModel
 import uvicorn
 
 from config import settings
+from database import init_db, check_db_health
+from services.repository_persistence import repository_persistence
 from services.groq_service import groq_service
 from services.repo_service import repo_service
 from services.retrieval_service import retrieval_engine
@@ -97,6 +99,19 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         content={"detail": "An internal server error occurred. Please contact the administrator or check server logs."}
     )
 
+# --- Startup Lifecycle ---
+@app.on_event("startup")
+async def on_startup():
+    """Initializes database schema and restores active session from PostgreSQL."""
+    try:
+        init_db()
+        persisted = repository_persistence.load_repository("default")
+        if persisted:
+            ACTIVE_SESSIONS["default"] = persisted
+            logger.info(f"Restored persisted repository '{persisted.repo_name}' for session 'default'.")
+    except Exception as e:
+        logger.warning(f"Database startup check note: {e}")
+
 
 # Active session cache (session_id -> RepositoryIndex)
 ACTIVE_SESSIONS: dict[str, RepositoryIndex] = {}
@@ -160,15 +175,27 @@ class PRSummaryRequest(BaseModel):
 # --- API Endpoints ---
 @app.get("/api/health")
 async def health_check():
+    db_health = check_db_health()
     return {
         "status": "online",
         "environment": settings.ENVIRONMENT,
         "debug": settings.DEBUG,
         "groq_configured": settings.is_groq_configured,
         "groq_model": settings.GROQ_MODEL,
+        "database": db_health,
         "host": settings.HOST,
         "port": settings.PORT
     }
+
+@app.get("/api/db/status")
+async def db_status():
+    """Returns detailed database connectivity and table counts without leaking secrets."""
+    return check_db_health()
+
+@app.get("/api/repositories")
+async def list_repositories():
+    """Returns list of persisted repositories from PostgreSQL."""
+    return repository_persistence.list_repositories()
 
 @app.post("/api/clone", response_model=RepositoryIndex)
 async def clone_repository(req: CloneRequest):
@@ -182,11 +209,19 @@ async def clone_repository(req: CloneRequest):
     
     session_id = "default"
     ACTIVE_SESSIONS[session_id] = repo_index
+    # Persist repository metadata and AST structure to PostgreSQL
+    repository_persistence.save_repository(session_id, repo_index)
     return repo_index
 
 @app.get("/api/index", response_model=RepositoryIndex)
 async def get_repository_index(session_id: str = "default"):
     session = ACTIVE_SESSIONS.get(session_id)
+    if not session:
+        # Fallback: attempt restoring from PostgreSQL
+        session = repository_persistence.load_repository(session_id)
+        if session:
+            ACTIVE_SESSIONS[session_id] = session
+
     if not session:
         raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
     return session
@@ -318,12 +353,14 @@ async def review_pr(req: PRReviewRequest):
     if not diff_text:
         raise HTTPException(status_code=400, detail="Pull request diff is required.")
     try:
-        return pr_service.review_pr(
+        review_result = pr_service.review_pr(
             diff_text=diff_text,
             repo_index=session,
             title=req.title,
             description=req.description
         )
+        repository_persistence.save_pr_review(req.session_id, review_result, title=req.title)
+        return review_result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -368,9 +405,14 @@ async def analyze_contribution(req: IssueRequest):
 async def audit_repository_opportunities(req: AuditRequest):
     session = ACTIVE_SESSIONS.get(req.session_id)
     if not session:
+        session = repository_persistence.load_repository(req.session_id)
+        if session:
+            ACTIVE_SESSIONS[req.session_id] = session
+    if not session:
         raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
     
     report = audit_service.run_audit(session)
+    repository_persistence.save_audit_report(req.session_id, report)
     return report
 
 @app.get("/api/dependencies")

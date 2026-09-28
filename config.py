@@ -2,6 +2,7 @@ import os
 import logging
 from pathlib import Path
 from typing import List, Union
+from urllib.parse import urlsplit, urlunsplit
 from dotenv import load_dotenv
 
 logger = logging.getLogger("onboarding_buddy.config")
@@ -29,6 +30,23 @@ def _parse_origins(origins_val: Union[str, List[str], None]) -> List[str]:
     if isinstance(origins_val, list):
         return [str(o).strip() for o in origins_val if str(o).strip()]
     return [o.strip() for o in str(origins_val).split(",") if o.strip()]
+
+
+def _mask_url(url: str) -> str:
+    """Masks credentials in a database URL so secrets are never printed to logs or APIs."""
+    if not url:
+        return "not-configured"
+    try:
+        parsed = urlsplit(url)
+        if parsed.password:
+            user = parsed.username or "user"
+            host = parsed.hostname or "localhost"
+            port_str = f":{parsed.port}" if parsed.port else ""
+            netloc = f"{user}:****@{host}{port_str}"
+            return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+        return url
+    except Exception:
+        return "configured (masked)"
 
 
 class Settings:
@@ -74,6 +92,18 @@ class Settings:
         else:
             self.GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 
+        # PostgreSQL Database Configuration (Neon PostgreSQL)
+        if "DATABASE_URL" in kwargs and kwargs["DATABASE_URL"] is not None:
+            self.DATABASE_URL: str = str(kwargs["DATABASE_URL"]).strip()
+        else:
+            self.DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+        # Connection Pool Settings
+        self.DB_POOL_SIZE: int = int(kwargs.get("DB_POOL_SIZE") or os.getenv("DB_POOL_SIZE", "10"))
+        self.DB_MAX_OVERFLOW: int = int(kwargs.get("DB_MAX_OVERFLOW") or os.getenv("DB_MAX_OVERFLOW", "20"))
+        self.DB_POOL_TIMEOUT: int = int(kwargs.get("DB_POOL_TIMEOUT") or os.getenv("DB_POOL_TIMEOUT", "30"))
+        self.DB_POOL_RECYCLE: int = int(kwargs.get("DB_POOL_RECYCLE") or os.getenv("DB_POOL_RECYCLE", "300"))
+
         # CORS Configuration
         if "CORS_ALLOWED_ORIGINS" in kwargs and kwargs["CORS_ALLOWED_ORIGINS"] is not None:
             self.CORS_ALLOWED_ORIGINS: List[str] = _parse_origins(kwargs["CORS_ALLOWED_ORIGINS"])
@@ -115,6 +145,10 @@ class Settings:
         return bool(self.GROQ_API_KEY and self.GROQ_API_KEY != "your_groq_api_key_here")
 
     @property
+    def is_db_configured(self) -> bool:
+        return bool(self.DATABASE_URL and "user:password" not in self.DATABASE_URL)
+
+    @property
     def masked_groq_key(self) -> str:
         """Returns a safe masked representation of the Groq API key (never leaks the full secret)."""
         if not self.GROQ_API_KEY or self.GROQ_API_KEY == "your_groq_api_key_here":
@@ -122,6 +156,11 @@ class Settings:
         if len(self.GROQ_API_KEY) <= 8:
             return "configured (masked)"
         return f"{self.GROQ_API_KEY[:4]}...{self.GROQ_API_KEY[-4:]}"
+
+    @property
+    def masked_database_url(self) -> str:
+        """Returns a sanitized representation of the database URL with password stripped."""
+        return _mask_url(self.DATABASE_URL)
 
     def get_cors_origins(self) -> List[str]:
         """Returns the list of allowed CORS origins based on environment."""
