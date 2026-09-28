@@ -1,9 +1,10 @@
 import os
+import logging
 from typing import Optional, Dict, List
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
 
@@ -22,20 +23,80 @@ from models.repository_index import (
     AgentExploreResponse, PullRequestAnalysis, PRReviewResponse, PRSummary
 )
 
+logger = logging.getLogger("onboarding_buddy.server")
+
+# FastAPI App Configuration
 app = FastAPI(
     title="OnBoarding Buddy API",
     description="Enterprise-grade repository onboarding API powered by Groq AI and AST Code Intelligence.",
-    version="2.0.0"
+    version="2.0.0",
+    debug=settings.DEBUG,
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
 )
 
-# Enable CORS for decoupled frontend development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Production-Grade CORS Configuration
+cors_origins = settings.get_cors_origins()
+if settings.is_production:
+    # In production: strictly allow only configured origins, forbid wildcard with credentials
+    allow_credentials = bool(cors_origins and "*" not in cors_origins)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins if cors_origins else [],
+        allow_credentials=allow_credentials,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+        max_age=600,
+    )
+else:
+    # Development / testing mode: allow local origins or development fallback
+    allow_credentials = bool(cors_origins and "*" not in cors_origins)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins if cors_origins else ["*"],
+        allow_credentials=allow_credentials,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+# --- Centralized Secure Error Handling ---
+
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    """Sanitize 5xx error responses in production to prevent leaking internal stack/paths."""
+    if exc.status_code >= 500:
+        logger.error(f"HTTP {exc.status_code} error on {request.method} {request.url.path}: {exc.detail}")
+        if not settings.DEBUG:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": "An internal server error occurred while processing the request."},
+                headers=exc.headers
+            )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=exc.headers
+    )
+
+@app.exception_handler(Exception)
+@app.exception_handler(500)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler ensuring no raw unhandled stack traces are leaked to clients."""
+    logger.exception(f"Unhandled exception during {request.method} {request.url.path}: {exc}")
+    if settings.DEBUG:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": f"Internal Server Error: {str(exc)}",
+                "type": type(exc).__name__
+            }
+        )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal server error occurred. Please contact the administrator or check server logs."}
+    )
+
 
 # Active session cache (session_id -> RepositoryIndex)
 ACTIVE_SESSIONS: dict[str, RepositoryIndex] = {}
@@ -101,6 +162,8 @@ class PRSummaryRequest(BaseModel):
 async def health_check():
     return {
         "status": "online",
+        "environment": settings.ENVIRONMENT,
+        "debug": settings.DEBUG,
         "groq_configured": settings.is_groq_configured,
         "groq_model": settings.GROQ_MODEL,
         "host": settings.HOST,
@@ -130,36 +193,44 @@ async def get_repository_index(session_id: str = "default"):
 
 @app.get("/api/file-content")
 async def get_file_content(file_path: str = Query(...)):
-    if not os.path.exists(file_path):
+    normalized_path = os.path.normpath(file_path)
+    if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
         raise HTTPException(status_code=404, detail="File not found.")
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(normalized_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
         return {
-            "file_path": file_path,
+            "file_path": normalized_path,
             "content": content,
             "lines": len(content.splitlines())
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+        logger.error(f"Failed to read file {normalized_path}: {e}")
+        if settings.DEBUG:
+            raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to read the requested file.")
 
 @app.post("/api/summarize")
 async def summarize_file(req: SummarizeRequest):
     session = ACTIVE_SESSIONS.get(req.session_id)
-    if not os.path.exists(req.file_path):
+    normalized_path = os.path.normpath(req.file_path)
+    if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
         raise HTTPException(status_code=404, detail="File path does not exist.")
     
     try:
-        with open(req.file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(normalized_path, "r", encoding="utf-8", errors="ignore") as f:
             code_content = f.read()
-        rel_path = os.path.basename(req.file_path)
+        rel_path = os.path.basename(normalized_path)
         if session:
-            rel_path = os.path.relpath(req.file_path, session.repo_path).replace("\\", "/")
+            rel_path = os.path.relpath(normalized_path, session.repo_path).replace("\\", "/")
             
         summary_result = groq_service.summarize_code(rel_path, code_content)
         return summary_result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
+        logger.error(f"Summarization error for {normalized_path}: {e}", exc_info=True)
+        if settings.DEBUG:
+            raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to summarize the requested file.")
 
 @app.post("/api/generate-guide")
 async def generate_guide(req: GenerateGuideRequest):
@@ -423,5 +494,5 @@ async def serve_frontend():
     return {"message": "OnBoarding Buddy FastAPI Backend is running. Frontend static index.html not found."}
 
 if __name__ == "__main__":
-    print(f"[OnBoarding Buddy] Starting Backend Server at http://{settings.HOST}:{settings.PORT}")
-    uvicorn.run("server:app", host=settings.HOST, port=settings.PORT, reload=True)
+    print(f"[OnBoarding Buddy] Starting Backend Server at http://{settings.HOST}:{settings.PORT} (env={settings.ENVIRONMENT}, debug={settings.DEBUG})")
+    uvicorn.run("server:app", host=settings.HOST, port=settings.PORT, reload=settings.DEBUG, log_level=settings.LOG_LEVEL.lower())

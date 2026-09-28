@@ -46,7 +46,7 @@ class GroqService:
     def _call_groq_api_messages(self, messages: List[Dict[str, str]], temperature: float = 0.2) -> str:
         """Call Groq API with a list of messages (system prompt, conversation history, user turn)."""
         if not settings.is_groq_configured:
-            return "⚠️ **Groq API Key missing.** Please set `GROQ_API_KEY` in your `.env` file to enable AI insights."
+            return "⚠️ **Groq API Key missing.** Please configure `GROQ_API_KEY` (in `.env` for local development or as a deployment secret in production) to enable AI insights."
 
         configured_model = (settings.GROQ_MODEL or "groq/compound").strip()
         target_model = MODEL_ALIAS_MAP.get(configured_model, configured_model)
@@ -69,7 +69,7 @@ class GroqService:
                 except Exception as e:
                     err_str = str(e)
                     if "401" in err_str or "Invalid API Key" in err_str:
-                        return "❌ **Invalid Groq API Key.** Please check `GROQ_API_KEY` in `.env`."
+                        return "❌ **Invalid Groq API Key.** Please verify `GROQ_API_KEY` in your `.env` or deployment secret configuration."
                     last_error = err_str
 
             # 2. Try HTTP REST fallback
@@ -87,7 +87,7 @@ class GroqService:
             try:
                 response = requests.post(self.GROQ_URL, headers=headers, json=payload, timeout=30)
                 if response.status_code == 401:
-                    return "❌ **Invalid Groq API Key.** Please verify your key in `.env`."
+                    return "❌ **Invalid Groq API Key.** Please verify your deployment secret or `.env` configuration."
                 if response.status_code == 200:
                     data = response.json()
                     return data["choices"][0]["message"]["content"]
@@ -95,7 +95,9 @@ class GroqService:
             except Exception as e:
                 last_error = str(e)
 
-        return f"❌ **Groq API Error**: Could not complete request. Details: {last_error}"
+        if settings.DEBUG:
+            return f"❌ **Groq API Error**: Could not complete request. Details: {last_error}"
+        return "❌ **Groq API Error**: Upstream AI service request failed. Please check server logs or verify your deployment secret."
 
     def _call_groq_api(self, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
         messages = [
