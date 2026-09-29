@@ -1,0 +1,107 @@
+# ==============================================================================
+# Docker Build Context Exclusions (.dockerignore)
+# Prevents secrets, environment configs, local virtualenvs, cache files,
+# git history, and temporary build artifacts from leaking into Docker images.
+# ==============================================================================
+
+# --- Secrets, Environment Variables & Credentials ---
+# NEVER copy production secrets or local environment variables into image layers
+.env
+.env.*
+*.env
+!.env.example
+*.key
+*.pem
+*.secret
+*.cert
+*.crt
+*.pfx
+secrets/
+credentials/
+id_rsa*
+
+# --- Git Repository & Version Control ---
+# Reduces image size and prevents leaking commit history & internal branch data
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# --- Virtual Environments & Dependencies ---
+# Local host venvs must not override container packages
+venv/
+.venv/
+ENV/
+env/
+__pypackages__/
+
+# --- Python Bytecode & Cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+parts/
+sdist/
+var/
+wheels/
+
+# --- Testing & Coverage Artifacts ---
+.pytest_cache/
+.coverage
+.coverage.*
+*.cover
+htmlcov/
+.hypothesis/
+.tox/
+.nox/
+
+# --- Local Databases & Storage Artifacts ---
+*.db
+*.sqlite
+*.sqlite3
+onboarding_buddy_local.db
+*.dump
+*.sql
+*.bak
+
+# --- Logs & Runtime Traces ---
+*.log
+logs/
+*.pid
+
+# --- Cloned Repositories & Temporary Directories ---
+onboarding_repo_*
+tmp/
+temp/
+scratch/
+
+# --- IDEs, Text Editors & Operating System Files ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- CI/CD & Deployment Configurations ---
+Dockerfile*
+docker-compose*.yml
+docker-compose*.yaml
+.dockerignore

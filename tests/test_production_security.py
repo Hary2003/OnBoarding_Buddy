@@ -209,7 +209,27 @@ class TestProductionSecurity(TestCase):
                 data = res.json()
                 self.assertIn("Dev detail info", data.get("detail", ""))
 
+    def test_14_dockerignore_excludes_env_secrets_and_artifacts(self):
+        """Verify .dockerignore properly excludes .env, credentials, .git, .venv, and build caches."""
+        dockerignore_path = ROOT_DIR / ".dockerignore"
+        self.assertTrue(dockerignore_path.exists())
+        content = dockerignore_path.read_text(encoding="utf-8")
+
+        # Secrets & environment
+        self.assertIn(".env", content)
+        self.assertIn(".env.*", content)
+        self.assertIn("!.env.example", content)
+        self.assertIn("*.key", content)
+        self.assertIn("secrets/", content)
+
+        # Build context bloat & venvs
+        self.assertIn(".git/", content)
+        self.assertIn(".venv/", content)
+        self.assertIn("__pycache__/", content)
+        self.assertIn("*.py[cod]", content)
+
 
 if __name__ == "__main__":
     import unittest
     unittest.main()
+
