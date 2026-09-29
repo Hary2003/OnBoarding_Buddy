@@ -51,6 +51,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def run_migrations():
     """Apply Alembic migrations to align database schema with models."""
     try:
+        # If no external database is configured, local SQLite is initialized directly via Base.metadata.create_all
+        if not settings.is_db_configured:
+            logger.info("Local SQLite database schema initialized via SQLAlchemy metadata.")
+            return
+
         import os
         from alembic.config import Config
         from alembic import command
