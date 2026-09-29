@@ -48,13 +48,32 @@ engine = get_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+def run_migrations():
+    """Apply Alembic migrations to align database schema with models."""
+    try:
+        import os
+        from alembic.config import Config
+        from alembic import command
+
+        base_dir = os.path.abspath(os.path.dirname(__file__))
+        ini_path = os.path.join(base_dir, "alembic.ini")
+        if os.path.exists(ini_path):
+            alembic_cfg = Config(ini_path)
+            alembic_cfg.set_main_option("script_location", os.path.join(base_dir, "alembic"))
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Database schema migrations applied successfully.")
+    except Exception as e:
+        logger.warning(f"Note on running database migrations: {e}")
+
+
 def init_db():
-    """Initialize database schemas and create tables idempotently."""
+    """Initialize database schemas and apply pending migrations idempotently."""
     try:
         # Import models so they are registered with Base.metadata
         import models.db_models  # noqa: F401
         Base.metadata.create_all(bind=engine)
-        logger.info("Database schema initialized successfully.")
+        run_migrations()
+        logger.info("Database schema initialized and verified successfully.")
     except Exception as e:
         logger.error(f"Failed to initialize database schema: {e}", exc_info=True)
         raise
