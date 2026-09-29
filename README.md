@@ -488,7 +488,20 @@ OnBoarding Buddy uses **Neon Serverless PostgreSQL** for persistent, scalable st
 - B-tree indexes on `session_id`, `repo_name`, `created_at`, and `updated_at`.
 - Composite index `(session_id, updated_at)` for high-throughput session lookups.
 
-### 4. Backup & Disaster Recovery Strategy
+### 4. Database Migrations (Alembic)
+Schema evolution is tracked and versioned using **Alembic**, ensuring seamless synchronization between SQLAlchemy ORM models and Neon PostgreSQL:
+- **Automatic Execution on Startup**: When `server.py` or test suites initialize via `init_db()`, pending migrations are applied automatically and idempotently.
+- **Manual Migration Command**:
+  ```bash
+  alembic upgrade head
+  # or using the migration utility:
+  python migrate.py
+  ```
+- **Key Entities & Fields**:
+  - `pr_reviews`: Includes `verdict` (indexed), `risks_count`, `executive_summary`, `developer_summary`, and `full_analysis`.
+  - `audit_reports`: Includes `total_opportunities`, `critical_count`, `high_count`, `medium_count`, `low_count`, `summary_narrative`, and `report_data`.
+
+### 5. Backup & Disaster Recovery Strategy
 - **Neon Point-in-Time Recovery (PITR)**: Provides continuous automated backup retention with recovery to any second.
 - **Instant Branching**: Enables zero-copy database branches for staging, migrations, and pre-deployment testing.
 - **Logical Backups**:

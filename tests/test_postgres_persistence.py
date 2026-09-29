@@ -6,7 +6,10 @@ from unittest.mock import patch
 from config import settings
 from database import engine, init_db, check_db_health, get_db_context
 from models.db_models import RepositoryRecord, ConversationTurnRecord, PRReviewRecord, AuditReportRecord
-from models.repository_index import RepositoryIndex, FileInfo, Symbol, Dependency, ArchitectureSummary
+from models.repository_index import (
+    RepositoryIndex, FileInfo, Symbol, Dependency, ArchitectureSummary,
+    PRReviewResponse, PRSummary, RiskAssessment, AuditReport, ContributionOpportunity
+)
 from services.repository_persistence import repository_persistence
 from services.conversation_service import ConversationService
 from server import app
@@ -166,6 +169,113 @@ class TestPostgresPersistence(TestCase):
         db_pass = getattr(urlsplit(settings.DATABASE_URL), "password", None)
         if db_pass:
             self.assertNotIn(db_pass, res.text)
+
+    def test_07_pr_review_persistence(self):
+        """Verify PR review persistence properly populates verdict, risks_count, and summaries."""
+        sample_review = PRReviewResponse(
+            verdict="REQUEST_CHANGES",
+            summary=PRSummary(
+                title="Refactor Auth Handler",
+                executive_summary="Security review detected potential vulnerabilities.",
+                developer_summary="Changes made to auth.py require remediation.",
+                risk_level="High"
+            ),
+            risks=[
+                RiskAssessment(
+                    risk_id="R-1",
+                    title="Insecure Token Validation",
+                    category="security",
+                    severity="High",
+                    file_path="services/auth.py"
+                ),
+                RiskAssessment(
+                    risk_id="R-2",
+                    title="Missing Exception Logging",
+                    category="maintainability",
+                    severity="Medium",
+                    file_path="services/auth.py"
+                )
+            ]
+        )
+
+        saved = repository_persistence.save_pr_review(
+            session_id=self.test_session_id,
+            review=sample_review,
+            title="Refactor Auth Handler"
+        )
+        self.assertTrue(saved)
+
+        with get_db_context() as db:
+            record = db.query(PRReviewRecord).filter(
+                PRReviewRecord.session_id == self.test_session_id
+            ).first()
+            self.assertIsNotNone(record)
+            self.assertEqual(record.verdict, "REQUEST_CHANGES")
+            self.assertEqual(record.risks_count, 2)
+            self.assertEqual(record.title, "Refactor Auth Handler")
+            self.assertEqual(record.executive_summary, "Security review detected potential vulnerabilities.")
+            self.assertEqual(record.developer_summary, "Changes made to auth.py require remediation.")
+            self.assertIsInstance(record.full_analysis, dict)
+            self.assertEqual(record.full_analysis.get("verdict"), "REQUEST_CHANGES")
+
+    def test_08_audit_report_persistence(self):
+        """Verify audit report persistence properly populates total_opportunities, severity counts, and narrative."""
+        sample_report = AuditReport(
+            repo_name="sample-audit-repo",
+            total_opportunities=3,
+            critical_count=1,
+            high_count=2,
+            medium_count=0,
+            low_count=0,
+            summary_narrative="Audit found 1 critical and 2 high contribution opportunities.",
+            opportunities=[
+                ContributionOpportunity(
+                    opportunity_id="OPP-1",
+                    title="Fix SQL injection risk",
+                    category="security",
+                    priority="critical",
+                    target_files=["database.py"]
+                )
+            ]
+        )
+
+        saved = repository_persistence.save_audit_report(
+            session_id=self.test_session_id,
+            report=sample_report
+        )
+        self.assertTrue(saved)
+
+        with get_db_context() as db:
+            record = db.query(AuditReportRecord).filter(
+                AuditReportRecord.session_id == self.test_session_id
+            ).first()
+            self.assertIsNotNone(record)
+            self.assertEqual(record.repo_name, "sample-audit-repo")
+            self.assertEqual(record.total_opportunities, 3)
+            self.assertEqual(record.critical_count, 1)
+            self.assertEqual(record.high_count, 2)
+            self.assertEqual(record.medium_count, 0)
+            self.assertEqual(record.low_count, 0)
+            self.assertEqual(record.summary_narrative, "Audit found 1 critical and 2 high contribution opportunities.")
+            self.assertIsInstance(record.report_data, dict)
+            self.assertEqual(record.report_data.get("total_opportunities"), 3)
+
+    def test_09_database_migration_schema_alignment(self):
+        """Verify inspector finds all required columns in Neon database schema."""
+        from sqlalchemy import inspect
+        insp = inspect(engine)
+
+        pr_cols = [c["name"] for c in insp.get_columns("pr_reviews")]
+        self.assertIn("verdict", pr_cols)
+        self.assertIn("risks_count", pr_cols)
+
+        audit_cols = [c["name"] for c in insp.get_columns("audit_reports")]
+        self.assertIn("total_opportunities", audit_cols)
+        self.assertIn("critical_count", audit_cols)
+        self.assertIn("high_count", audit_cols)
+        self.assertIn("medium_count", audit_cols)
+        self.assertIn("low_count", audit_cols)
+        self.assertIn("summary_narrative", audit_cols)
 
 
 if __name__ == "__main__":
