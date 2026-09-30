@@ -49,6 +49,25 @@ def _mask_url(url: str) -> str:
         return "configured (masked)"
 
 
+def _is_container() -> bool:
+    """Detect whether running inside a Docker or OCI container."""
+    if os.getenv("DOCKER_CONTAINER", "").strip().lower() in ("true", "1", "yes"):
+        return True
+    if os.getenv("RUNNING_IN_DOCKER", "").strip().lower() in ("true", "1", "yes"):
+        return True
+    if Path("/.dockerenv").exists():
+        return True
+    try:
+        cgroup_path = Path("/proc/1/cgroup")
+        if cgroup_path.exists():
+            content = cgroup_path.read_text(encoding="utf-8", errors="ignore")
+            if any(term in content for term in ("docker", "kubepods", "containerd")):
+                return True
+    except Exception:
+        pass
+    return False
+
+
 class Settings:
     """Enterprise application configuration supporting local development and secure production deployments."""
 
@@ -69,17 +88,46 @@ class Settings:
             else:
                 self.DEBUG: bool = False if self.ENVIRONMENT == "production" else True
 
-        # Server network binding
-        _default_host = "0.0.0.0" if self.ENVIRONMENT == "production" else "127.0.0.1"
-        if "HOST" in kwargs and kwargs["HOST"] is not None:
-            self.HOST: str = str(kwargs["HOST"]).strip()
+        # Container execution detection
+        if "IS_CONTAINER" in kwargs and kwargs["IS_CONTAINER"] is not None:
+            self.IS_CONTAINER: bool = _parse_bool(kwargs["IS_CONTAINER"])
         else:
-            self.HOST = os.getenv("HOST", _default_host).strip()
+            _container_raw = os.getenv("DOCKER_CONTAINER", os.getenv("RUNNING_IN_DOCKER"))
+            if _container_raw is not None:
+                self.IS_CONTAINER = _parse_bool(_container_raw)
+            else:
+                self.IS_CONTAINER = _is_container()
+
+        # Server network binding
+        # In container environments, binding to 127.0.0.1 or localhost isolates the server from host port mapping.
+        _default_host = "0.0.0.0" if (self.ENVIRONMENT == "production" or self.IS_CONTAINER) else "127.0.0.1"
+        if "HOST" in kwargs and kwargs["HOST"] is not None:
+            raw_host = str(kwargs["HOST"]).strip()
+        else:
+            raw_host = os.getenv("HOST", _default_host).strip()
+
+        if self.IS_CONTAINER and raw_host in ("127.0.0.1", "localhost"):
+            self.HOST: str = "0.0.0.0"
+        else:
+            self.HOST: str = raw_host
 
         if "PORT" in kwargs and kwargs["PORT"] is not None:
             self.PORT: int = int(kwargs["PORT"])
         else:
             self.PORT = int(os.getenv("PORT", "8000"))
+
+        # Auto-reload configuration
+        # Auto-reload is disabled in production and Docker containers to eliminate file-watching overhead and ensure container stability.
+        if "RELOAD" in kwargs and kwargs["RELOAD"] is not None:
+            self.RELOAD: bool = _parse_bool(kwargs["RELOAD"])
+        else:
+            _reload_raw = os.getenv("RELOAD", os.getenv("UVICORN_RELOAD"))
+            if _reload_raw is not None:
+                self.RELOAD = _parse_bool(_reload_raw)
+            elif self.IS_CONTAINER or self.ENVIRONMENT == "production":
+                self.RELOAD = False
+            else:
+                self.RELOAD = self.DEBUG
 
         # Groq AI Service Secret (MUST be provided as a deployment secret in production)
         if "GROQ_API_KEY" in kwargs and kwargs["GROQ_API_KEY"] is not None:
@@ -139,6 +187,10 @@ class Settings:
     @property
     def is_testing(self) -> bool:
         return self.ENVIRONMENT == "testing"
+
+    @property
+    def is_container(self) -> bool:
+        return self.IS_CONTAINER
 
     @property
     def is_groq_configured(self) -> bool:
