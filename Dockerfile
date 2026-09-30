@@ -9,10 +9,13 @@ FROM python:3.12-slim
 # Prevent Python from writing bytecode and enable real-time log flushing
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    DOCKER_CONTAINER=true \
     HOST=0.0.0.0 \
     PORT=8000 \
     ENVIRONMENT=production \
-    DEBUG=false
+    DEBUG=false \
+    RELOAD=false \
+    ENABLE_DOCS=true
 
 # Install required system packages:
 # - git: essential for GitPython repository indexing and diff analysis
