@@ -228,6 +228,26 @@ class TestProductionSecurity(TestCase):
         self.assertIn("__pycache__/", content)
         self.assertIn("*.py[cod]", content)
 
+    def test_15_docker_container_host_and_reload_overrides(self):
+        """Verify that when running in a Docker container, host binds to 0.0.0.0 and reload is disabled."""
+        with patch.dict(os.environ, {
+            "DOCKER_CONTAINER": "true",
+            "HOST": "127.0.0.1",
+            "DEBUG": "true",
+            "ENVIRONMENT": "development"
+        }, clear=False):
+            s = Settings()
+            self.assertTrue(s.is_container)
+            self.assertEqual(s.HOST, "0.0.0.0")
+            self.assertFalse(s.RELOAD)
+
+    def test_16_local_dev_settings_preserved(self):
+        """Verify that outside a container, local development settings (127.0.0.1 and reload) are preserved."""
+        s = Settings(IS_CONTAINER=False, HOST="127.0.0.1", DEBUG="true", ENVIRONMENT="development")
+        self.assertFalse(s.is_container)
+        self.assertEqual(s.HOST, "127.0.0.1")
+        self.assertTrue(s.RELOAD)
+
 
 if __name__ == "__main__":
     import unittest
