@@ -4,7 +4,7 @@ from typing import Optional, Dict, List
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 import uvicorn
 
@@ -19,6 +19,7 @@ from services.contribution_service import contribution_service
 from services.audit_service import audit_service
 from services.agent.agent import agent_service
 from services.pr_service import pr_service
+from services.export_service import export_service
 from models.repository_index import (
     RepositoryIndex, RetrievedContextPayload, ChatResponse,
     ContributionPlan, AuditReport, ContributionOpportunity,
@@ -284,6 +285,74 @@ async def generate_guide(req: GenerateGuideRequest):
     return {
         "repo_name": repo_name,
         "guide": guide_markdown
+    }
+
+# --- Onboarding & Architecture Export Endpoints ---
+
+@app.get("/api/export/guide")
+async def export_guide(session_id: str = "default", download: bool = Query(False)):
+    session = ACTIVE_SESSIONS.get(session_id)
+    if not session:
+        session = repository_persistence.load_repository(session_id)
+        if session:
+            ACTIVE_SESSIONS[session_id] = session
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+
+    guide_markdown = export_service.export_onboarding_guide_markdown(session)
+    filename = f"{session.repo_name}_ONBOARDING_GUIDE.md"
+    if download:
+        return Response(
+            content=guide_markdown,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    return {"repo_name": session.repo_name, "filename": filename, "markdown": guide_markdown}
+
+@app.get("/api/export/architecture")
+async def export_architecture(session_id: str = "default", download: bool = Query(False)):
+    session = ACTIVE_SESSIONS.get(session_id)
+    if not session:
+        session = repository_persistence.load_repository(session_id)
+        if session:
+            ACTIVE_SESSIONS[session_id] = session
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+
+    arch_markdown = export_service.export_architecture_markdown(session)
+    filename = f"{session.repo_name}_ARCHITECTURE_SPEC.md"
+    if download:
+        return Response(
+            content=arch_markdown,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    return {"repo_name": session.repo_name, "filename": filename, "markdown": arch_markdown}
+
+@app.get("/api/export/audit")
+async def export_audit(session_id: str = "default", download: bool = Query(False)):
+    session = ACTIVE_SESSIONS.get(session_id)
+    if not session:
+        session = repository_persistence.load_repository(session_id)
+        if session:
+            ACTIVE_SESSIONS[session_id] = session
+    if not session:
+        raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
+
+    audit_report = audit_service.run_audit(session)
+    audit_markdown = export_service.export_audit_markdown(audit_report)
+    filename = f"{session.repo_name}_AUDIT_REPORT.md"
+    if download:
+        return Response(
+            content=audit_markdown,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    return {
+        "repo_name": session.repo_name,
+        "filename": filename,
+        "total_opportunities": audit_report.total_opportunities,
+        "markdown": audit_markdown
     }
 
 @app.post("/api/retrieve", response_model=RetrievedContextPayload)
