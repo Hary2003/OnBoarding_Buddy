@@ -1,5 +1,11 @@
 # 🚀 OnBoarding Buddy
 
+[![CI Pipeline](https://github.com/Hary2003/OnBoarding_Buddy/actions/workflows/ci.yml/badge.svg)](https://github.com/Hary2003/OnBoarding_Buddy/actions/workflows/ci.yml)
+[![FastAPI](https://img.shields.io/badge/FastAPI-2.0.0-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12-blue?style=flat&logo=python)](https://python.org)
+[![Docker](https://img.shields.io/badge/Docker-Production%20Ready-2496ED?style=flat&logo=docker)](https://docker.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 > **AI-powered repository intelligence and agentic codebase exploration platform for developers.**
 
 OnBoarding Buddy helps developers understand, navigate, and contribute to unfamiliar codebases.
@@ -572,7 +578,10 @@ The test suite covers:
 * Diff-level security vulnerability scanning (secrets, eval, shell, injection, SSL, deserialization)
 * PR Review Agent and evidence-backed inline review comments
 * Agent PR investigation tools (`get_pr_diff`, `get_changed_files`, `get_changed_symbols`, etc.)
-* FastAPI endpoints (`/api/pr/analyze`, `/api/pr/review`, `/api/pr/summary`)
+* FastAPI PR endpoints (`/api/pr/analyze`, `/api/pr/review`, `/api/pr/summary`)
+* Enterprise Markdown & Report Export Engine (`/api/export/guide`, `/api/export/architecture`, `/api/export/audit`)
+* Architectural blueprint exporter with dynamic Mermaid diagram rendering
+* Automated CI/CD pipeline with multi-version testing, flake8 linting, security audits, and Docker verification
 
 ---
 
@@ -689,6 +698,8 @@ Repository analysis does not require executing arbitrary target-repository code.
 * [x] Vulnerability/debt opportunity detection
 * [x] Agentic repository exploration
 * [x] Pull-request analysis & code review agent
+* [x] Markdown & Mermaid architecture report export engine
+* [x] Automated CI/CD pipeline with security and Docker validation
 * [ ] Advanced semantic code retrieval
 * [ ] GitHub issue integration
 * [ ] Repository change tracking

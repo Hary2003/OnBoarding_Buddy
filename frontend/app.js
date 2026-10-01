@@ -39,7 +39,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const generateGuideBtn = document.getElementById("generate-guide-btn");
     const guideContent = document.getElementById("guide-content");
     const overviewGuideBtn = document.getElementById("overview-guide-btn");
+    const overviewExportArchBtn = document.getElementById("overview-export-arch-btn");
     const overviewRescanBtn = document.getElementById("overview-rescan-btn");
+    const exportGuideBtn = document.getElementById("export-guide-btn");
 
     // Overview Elements
     const statFilesVal = document.getElementById("stat-files-val");
@@ -1982,4 +1984,27 @@ new file mode 100644
             }
         });
     }
+
+    if (exportGuideBtn) {
+        exportGuideBtn.addEventListener("click", () => {
+            if (!currentSession) {
+                showToast("Please analyze a repository first to export its onboarding guide.", "warning");
+                return;
+            }
+            showToast("Downloading onboarding guide markdown...", "info");
+            window.location.href = `/api/export/guide?session_id=default&download=true`;
+        });
+    }
+
+    if (overviewExportArchBtn) {
+        overviewExportArchBtn.addEventListener("click", () => {
+            if (!currentSession) {
+                showToast("Please analyze a repository first to export architecture blueprint.", "warning");
+                return;
+            }
+            showToast("Downloading architecture specification...", "info");
+            window.location.href = `/api/export/architecture?session_id=default&download=true`;
+        });
+    }
 });
+
