@@ -248,8 +248,20 @@ class TestProductionSecurity(TestCase):
         self.assertEqual(s.HOST, "127.0.0.1")
         self.assertTrue(s.RELOAD)
 
+    def test_17_github_actions_ci_workflow(self):
+        """Verify .github/workflows/ci.yml exists and defines test and security checks."""
+        ci_path = ROOT_DIR / ".github" / "workflows" / "ci.yml"
+        self.assertTrue(ci_path.exists(), "CI workflow .github/workflows/ci.yml must exist")
+        content = ci_path.read_text(encoding="utf-8")
+        self.assertIn("name: CI Pipeline", content)
+        self.assertIn("actions/checkout@v4", content)
+        self.assertIn("actions/setup-python@v5", content)
+        self.assertIn("unittest discover tests", content)
+        self.assertIn("docker build", content)
+
 
 if __name__ == "__main__":
     import unittest
     unittest.main()
+
 
