@@ -91,7 +91,7 @@ class TestFrontendDockerConfig(unittest.TestCase):
         self.assertIn("frontend:", content)
 
         # Port mapping
-        self.assertIn("3000:80", content, "Frontend should expose port 3000 (mapped to container 80)")
+        self.assertIn("80:80", content, "Frontend should expose port 80")
         self.assertIn("8000:8000", content, "Backend should expose port 8000")
 
         # Dependency and health checks

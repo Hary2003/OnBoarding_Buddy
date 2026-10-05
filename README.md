@@ -548,7 +548,7 @@ OnBoarding Buddy features a production-grade multi-container architecture orches
 │                 Client Browser / Developer                  │
 └──────────────────────────────┬──────────────────────────────┘
                                │
-                Port 3000 / 80 │
+                     Port 80   │
                                ▼
        ┌───────────────────────────────────────────────┐
        │   Frontend Container (Nginx 1.27 Alpine)      │
@@ -571,7 +571,7 @@ OnBoarding Buddy features a production-grade multi-container architecture orches
                                │
                                ▼
        ┌───────────────────────────────────────────────┐
-       │  Neon Serverless PostgreSQL / SQLite Volume   │
+       │          Neon Serverless PostgreSQL           │
        └───────────────────────────────────────────────┘
 ```
 
@@ -584,10 +584,10 @@ docker compose up --build
 ```
 
 Access the application:
-* **Frontend Web Application**: [http://localhost:3000](http://localhost:3000) (or [http://localhost](http://localhost))
-* **FastAPI Backend & Interactive Swagger UI**: [http://localhost:3000/docs](http://localhost:3000/docs) (proxied) or direct at [http://localhost:8000/docs](http://localhost:8000/docs)
-* **Frontend Container Healthcheck**: [http://localhost:3000/healthz](http://localhost:3000/healthz)
-* **Backend Health & Diagnostics**: [http://localhost:3000/api/health](http://localhost:3000/api/health)
+* **Frontend Web Application**: [http://localhost](http://localhost) (Port 80)
+* **FastAPI Backend & Interactive Swagger UI**: [http://localhost/docs](http://localhost/docs) (proxied) or direct at [http://localhost:8000/docs](http://localhost:8000/docs)
+* **Frontend Container Healthcheck**: [http://localhost/healthz](http://localhost/healthz)
+* **Backend Health & Diagnostics**: [http://localhost/api/health](http://localhost/api/health)
 
 To stop services:
 ```bash
