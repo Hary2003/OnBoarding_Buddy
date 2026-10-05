@@ -64,6 +64,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: actions/setup-buildx-action@v3
 
-      - name: Build Docker Container
+      - name: Build Docker Containers & Validate Compose
         run: |
           docker build -t onboarding-buddy:ci .
+          docker build -t onboarding-buddy-frontend:ci ./frontend
+          docker compose config

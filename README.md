@@ -539,6 +539,93 @@ http://127.0.0.1:8000
 
 ---
 
+# 🐳 Docker & Frontend Containerization
+
+OnBoarding Buddy features a production-grade multi-container architecture orchestrated via Docker Compose:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 Client Browser / Developer                  │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                Port 3000 / 80 │
+                               ▼
+       ┌───────────────────────────────────────────────┐
+       │   Frontend Container (Nginx 1.27 Alpine)      │
+       │   - Serves HTML5 / CSS / JS UI Assets        │
+       │   - Rewrites & caches /static/ bundles        │
+       │   - Enforces Security Headers & Gzip          │
+       │   - Healthcheck: /healthz                     │
+       └───────────────────────┬───────────────────────┘
+                               │
+             Internal Network  │ proxy_pass /api/ -> backend:8000
+             (onboarding-net)  │ proxy_pass /docs -> backend:8000
+                               ▼
+       ┌───────────────────────────────────────────────┐
+       │   Backend Container (Python 3.12 FastAPI)     │
+       │   - AST Intelligence & Dependency Parsing     │
+       │   - Groq AI Reasoning & Agentic Tools         │
+       │   - Alembic & Neon PostgreSQL Engine          │
+       │   - Healthcheck: /api/health                  │
+       └───────────────────────┬───────────────────────┘
+                               │
+                               ▼
+       ┌───────────────────────────────────────────────┐
+       │  Neon Serverless PostgreSQL / SQLite Volume   │
+       └───────────────────────────────────────────────┘
+```
+
+### 1. Quickstart with Docker Compose
+
+Build and launch the full stack (backend + frontend reverse proxy) with one command:
+
+```bash
+docker compose up --build
+```
+
+Access the application:
+* **Frontend Web Application**: [http://localhost:3000](http://localhost:3000) (or [http://localhost](http://localhost))
+* **FastAPI Backend & Interactive Swagger UI**: [http://localhost:3000/docs](http://localhost:3000/docs) (proxied) or direct at [http://localhost:8000/docs](http://localhost:8000/docs)
+* **Frontend Container Healthcheck**: [http://localhost:3000/healthz](http://localhost:3000/healthz)
+* **Backend Health & Diagnostics**: [http://localhost:3000/api/health](http://localhost:3000/api/health)
+
+To stop services:
+```bash
+docker compose down
+```
+
+### 2. Standalone Frontend Docker Container
+
+Build the frontend Docker image directly:
+
+```bash
+docker build -t onboarding-buddy-frontend:latest ./frontend
+```
+
+Run the container:
+
+```bash
+docker run -d -p 3000:80 --name onboarding-frontend onboarding-buddy-frontend:latest
+```
+
+### 3. Local Development with Live Hot-Reloading
+
+#### Option A: Docker Compose Dev Override
+Mount local source directories for hot-reloading across backend and frontend containers:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+#### Option B: Vite Frontend Dev Server
+Run Vite locally with instant Hot Module Replacement (HMR) and automatic `/api` proxying to FastAPI backend:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
 # 🧪 Testing
 
 Run the complete test suite:
