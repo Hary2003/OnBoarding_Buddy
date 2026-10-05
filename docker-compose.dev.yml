@@ -1,0 +1,21 @@
+# ==============================================================================
+# Development Docker Compose Override for OnBoarding Buddy
+# Mounts local source files for hot reloading in development
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# ==============================================================================
+
+services:
+  backend:
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - RELOAD=true
+    volumes:
+      - .:/app
+      - /app/.venv
+      - /app/__pycache__
+
+  frontend:
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
