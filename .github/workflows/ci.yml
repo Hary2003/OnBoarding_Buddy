@@ -38,10 +38,16 @@ jobs:
           TEST_EXIT_CODE=$?
           cat test_results.log
           python -c "
+          import re
           with open('test_results.log') as f:
-              for line in f:
-                  if any(k in line for k in ['ModuleNotFoundError:', 'ImportError:', 'Traceback', 'line ', 'Error:']):
-                      print(f'::error title=Trace::{line.strip()}')
+              content = f.read()
+          tb = re.findall(r'Traceback \(most recent call last\):.*?(?=\n[A-Z]|\Z)', content, re.DOTALL)
+          if tb:
+              for line in tb[0].strip().splitlines():
+                  print(f'::error title=TB::{line}')
+          else:
+              for line in content.splitlines()[-20:]:
+                  print(f'::error title=Tail::{line}')
           "
           exit $TEST_EXIT_CODE
 
