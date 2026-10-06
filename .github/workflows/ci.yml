@@ -33,7 +33,17 @@ jobs:
           PORT: 8000
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          python -m unittest discover tests
+          set +e
+          python -m unittest discover tests -v > test_results.log 2>&1
+          TEST_EXIT_CODE=$?
+          cat test_results.log
+          python -c "
+          with open('test_results.log') as f:
+              for line in f:
+                  if any(k in line for k in ['FAIL:', 'ERROR:', 'AssertionError:', 'Ran ', 'ModuleNotFound', 'ImportError', 'psycopg', 'OperationalError', 'Exception:']):
+                      print(f'::error title=Diagnostic::{line.strip()}')
+          "
+          exit $TEST_EXIT_CODE
 
   frontend-build:
     name: Frontend Build
