@@ -40,8 +40,8 @@ jobs:
           python -c "
           with open('test_results.log') as f:
               for line in f:
-                  if any(k in line for k in ['FAIL:', 'ERROR:', 'AssertionError:', 'Ran ', 'ModuleNotFound', 'ImportError', 'psycopg', 'OperationalError', 'Exception:']):
-                      print(f'::error title=Diagnostic::{line.strip()}')
+                  if any(k in line for k in ['ModuleNotFoundError:', 'ImportError:', 'Traceback', 'line ', 'Error:']):
+                      print(f'::error title=Trace::{line.strip()}')
           "
           exit $TEST_EXIT_CODE
 
