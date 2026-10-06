@@ -31,22 +31,11 @@ jobs:
           DEBUG: "false"
           HOST: 127.0.0.1
           PORT: 8000
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RAW_DB_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          set +e
-          python -m unittest discover tests -v > test_results.log 2>&1
-          TEST_EXIT_CODE=$?
-          cat test_results.log
-          python -c "
-          import re
-          with open('test_results.log') as f:
-              content = f.read()
-          tb = re.findall(r'Traceback \(most recent call last\):.*?(?=\n=|\Z)', content, re.DOTALL)
-          if tb:
-              for line in tb[0].strip().splitlines()[-10:]:
-                  print(f'::error title=TB::{line}')
-          "
-          exit $TEST_EXIT_CODE
+          CLEAN_URL=$(python -c "import os; u = os.environ.get('RAW_DB_URL', '').strip(); u = u.split('=', 1)[1].strip() if u.startswith('DATABASE_URL=') else u; u = u.strip('\"\''); print(u)")
+          export DATABASE_URL="$CLEAN_URL"
+          python -m unittest discover tests
 
   frontend-build:
     name: Frontend Build
