@@ -48,3 +48,12 @@ Thumbs.db
 onboarding_repo_*
 tmp/
 temp/
+
+# Frontend dependencies and build outputs
+node_modules/
+dist/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
