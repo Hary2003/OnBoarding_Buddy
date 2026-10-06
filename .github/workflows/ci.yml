@@ -33,7 +33,8 @@ jobs:
           PORT: 8000
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          python -m unittest discover tests
+          python -c "import os; print('DATABASE_URL configured:', bool(os.getenv('DATABASE_URL')))"
+          python -m unittest discover tests -v
 
   frontend-build:
     name: Frontend Build
