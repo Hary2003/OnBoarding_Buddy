@@ -41,13 +41,10 @@ jobs:
           import re
           with open('test_results.log') as f:
               content = f.read()
-          tb = re.findall(r'Traceback \(most recent call last\):.*?(?=\n[A-Z]|\Z)', content, re.DOTALL)
+          tb = re.findall(r'Traceback \(most recent call last\):.*?(?=\n=|\Z)', content, re.DOTALL)
           if tb:
-              for line in tb[0].strip().splitlines():
+              for line in tb[0].strip().splitlines()[-10:]:
                   print(f'::error title=TB::{line}')
-          else:
-              for line in content.splitlines()[-20:]:
-                  print(f'::error title=Tail::{line}')
           "
           exit $TEST_EXIT_CODE
 
