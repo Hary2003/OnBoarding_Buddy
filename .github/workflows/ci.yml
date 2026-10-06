@@ -33,17 +33,19 @@ jobs:
           PORT: 8000
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          echo "DATABASE_URL secret is present: $(python -c "import os; print(bool(os.getenv('DATABASE_URL')))")" >> $GITHUB_STEP_SUMMARY
           set +e
           python -m unittest discover tests -v > test_results.log 2>&1
           TEST_EXIT_CODE=$?
           cat test_results.log
-          if [ $TEST_EXIT_CODE -ne 0 ]; then
-            echo "### Test Failures" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -n 50 test_results.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
+          python -c "
+          import os
+          db_present = bool(os.getenv('DATABASE_URL'))
+          print(f'::error title=DB_Config::DATABASE_URL secret present: {db_present}')
+          with open('test_results.log') as f:
+              for line in f:
+                  if any(k in line for k in ['FAIL:', 'ERROR:', 'AssertionError:', 'Ran ']):
+                      print(f'::error title=TestResult::{line.strip()}')
+          "
           exit $TEST_EXIT_CODE
 
   frontend-build:
