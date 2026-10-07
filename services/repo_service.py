@@ -12,6 +12,15 @@ from datetime import datetime
 from git import Repo, GitCommandError
 
 from models.repository_index import Symbol, Dependency, FileInfo, RepositoryIndex, GraphNode, GraphEdge, CycleDetail, ArchitectureSummary
+from services.security_guard import (
+    is_safe_git_target,
+    is_safe_repo_path,
+    is_symlink_escaping_boundary,
+    count_lines_safe,
+    MAX_PARSEABLE_FILE_SIZE,
+    MAX_VIEWABLE_FILE_SIZE,
+    MAX_REPO_FILES
+)
 
 IGNORE_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build", ".idea", ".vscode", "tmp", "temp"}
 SUPPORTED_EXTENSIONS = {
@@ -41,18 +50,32 @@ LANGUAGE_MAP = {
 
 class RepoService:
     def clone_or_use_repo(self, target: str) -> Tuple[bool, str, str]:
-        """Clones a remote git URL or validates a local directory path."""
+        """Clones a remote git URL or validates a local directory path with security checks."""
         target = target.strip()
         if not target:
             return False, "", "Target repository path or URL is empty."
-        
+
+        # Validate target against CLI flag injection and dangerous schemes
+        is_safe, error_msg = is_safe_git_target(target)
+        if not is_safe:
+            return False, "", error_msg or "Invalid repository target."
+
         if os.path.exists(target) and os.path.isdir(target):
-            return True, os.path.abspath(target), ""
-        
-        if target.startswith("http://") or target.startswith("https://") or target.endswith(".git"):
+            return True, os.path.realpath(os.path.abspath(target)), ""
+
+        if target.startswith("http://") or target.startswith("https://") or target.startswith("git@") or target.endswith(".git"):
             temp_dir = tempfile.mkdtemp(prefix="onboarding_repo_")
             try:
-                Repo.clone_from(target, temp_dir, depth=1)
+                Repo.clone_from(
+                    target,
+                    temp_dir,
+                    depth=1,
+                    env={"GIT_TERMINAL_PROMPT": "0"},
+                    multi_options=[
+                        "--config", "core.hooksPath=/dev/null",
+                        "--no-recurse-submodules"
+                    ]
+                )
                 return True, temp_dir, ""
             except GitCommandError as e:
                 self.cleanup_temp_dir(temp_dir)
@@ -60,28 +83,68 @@ class RepoService:
             except Exception as e:
                 self.cleanup_temp_dir(temp_dir)
                 return False, "", f"Failed to clone repository: {str(e)}"
-        
+
         return False, "", f"Invalid path or repository URL: {target}"
 
     def get_repo_files(self, repo_path: str) -> List[str]:
-        """Returns all relevant source code files in repository."""
+        """Returns all relevant source code files in repository while enforcing symlink and size boundaries."""
         code_files = []
-        for root, dirs, files in os.walk(repo_path):
-            dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+        canonical_repo_root = os.path.realpath(os.path.abspath(repo_path))
+        visited_dirs = set()
+
+        for root, dirs, files in os.walk(repo_path, followlinks=False):
+            safe_dirs = []
+            for d in dirs:
+                if d in IGNORE_DIRS or d.startswith("."):
+                    continue
+                d_full = os.path.join(root, d)
+                try:
+                    d_real = os.path.realpath(d_full)
+                    # Check if directory escapes repo boundary
+                    if os.path.commonpath([canonical_repo_root, d_real]) != canonical_repo_root:
+                        continue
+                    if d_real in visited_dirs:
+                        continue
+                    visited_dirs.add(d_real)
+                    safe_dirs.append(d)
+                except Exception:
+                    continue
+            dirs[:] = safe_dirs
+
             for file in files:
+                if len(code_files) >= MAX_REPO_FILES:
+                    break
+
+                # Disallow null bytes or invalid filenames
+                if "\x00" in file:
+                    continue
+
+                full_path = os.path.join(root, file)
+                # Ensure symlink does not escape repository boundary
+                if is_symlink_escaping_boundary(canonical_repo_root, full_path):
+                    continue
+
                 ext = os.path.splitext(file)[1].lower()
                 if ext in SUPPORTED_EXTENSIONS:
-                    code_files.append(os.path.join(root, file))
+                    code_files.append(full_path)
+
+            if len(code_files) >= MAX_REPO_FILES:
+                break
+
         return sorted(code_files)
 
     def extract_symbols(self, file_path: str, language: str) -> List[Symbol]:
-        """Extracts function, method, and class symbols with AST or regex."""
+        """Extracts function, method, and class symbols with AST or regex within resource limits."""
         symbols: List[Symbol] = []
         ext = os.path.splitext(file_path)[1].lower()
 
         try:
+            # Resource exhaustion / DoS check: skip AST parse on oversized files
+            if os.path.getsize(file_path) > MAX_PARSEABLE_FILE_SIZE:
+                return symbols
+
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
+                content = f.read(MAX_PARSEABLE_FILE_SIZE)
 
             if ext == ".py":
                 try:
@@ -218,8 +281,11 @@ class RepoService:
         ext = os.path.splitext(file_path)[1].lower()
 
         try:
+            if os.path.getsize(file_path) > MAX_PARSEABLE_FILE_SIZE:
+                return deps
+
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
+                content = f.read(MAX_PARSEABLE_FILE_SIZE)
 
             raw_imports: List[Tuple[str, str, int, str]] = [] # (mod_str, statement, level, import_kind)
 
@@ -524,7 +590,7 @@ class RepoService:
 
             try:
                 with open(info.full_path, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
+                    content = f.read(65536)
                 
                 if 'if __name__ == "__main__":' in content or "if __name__ == '__main__':" in content:
                     confidence += 0.4
@@ -646,13 +712,8 @@ class RepoService:
             lang = LANGUAGE_MAP.get(ext, "other")
             languages_count[lang] = languages_count.get(lang, 0) + 1
 
-            size_bytes = os.path.getsize(f)
-            line_cnt = 0
-            try:
-                with open(f, "r", encoding="utf-8", errors="ignore") as file_obj:
-                    line_cnt = len(file_obj.readlines())
-            except Exception:
-                pass
+            size_bytes = os.path.getsize(f) if os.path.exists(f) else 0
+            line_cnt = count_lines_safe(f)
             total_lines += line_cnt
 
             cnt, date_str, act_score = activity_data.get(f, (1, "Recent", 50.0))
