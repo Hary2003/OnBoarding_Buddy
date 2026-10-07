@@ -25,6 +25,7 @@ from models.repository_index import (
     ContributionPlan, AuditReport, ContributionOpportunity,
     AgentExploreResponse, PullRequestAnalysis, PRReviewResponse, PRSummary
 )
+from services.security_guard import is_safe_repo_path, MAX_VIEWABLE_FILE_SIZE
 
 logger = logging.getLogger("onboarding_buddy.server")
 
@@ -227,43 +228,98 @@ async def get_repository_index(session_id: str = "default"):
         raise HTTPException(status_code=404, detail="No active repository index found. Please analyze a repo first.")
     return session
 
-@app.get("/api/file-content")
-async def get_file_content(file_path: str = Query(...)):
-    normalized_path = os.path.normpath(file_path)
-    if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
+def get_allowed_repo_roots(session_id: str = "default") -> List[str]:
+    """Retrieves all valid repository root paths for boundary checks."""
+    roots: List[str] = []
+    session = ACTIVE_SESSIONS.get(session_id)
+    if not session:
+        session = repository_persistence.load_repository(session_id)
+        if session:
+            ACTIVE_SESSIONS[session_id] = session
+
+    if session and session.repo_path:
+        roots.append(session.repo_path)
+
+    for s in ACTIVE_SESSIONS.values():
+        if s.repo_path and s.repo_path not in roots:
+            roots.append(s.repo_path)
+
+    # Allow current project directory as fallback root (for local inspections and tests)
+    project_root = os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
+    if project_root not in roots:
+        roots.append(project_root)
+
+    return roots
+
+
+def validate_file_within_boundary(file_path: str, session_id: str = "default") -> str:
+    """
+    Validates that file_path strictly resides within an allowed repository boundary.
+    Raises HTTPException(403) on path traversal attempts or symlinks escaping the boundary,
+    and HTTPException(404) if the file does not exist.
+    """
+    if not file_path or not str(file_path).strip():
         raise HTTPException(status_code=404, detail="File not found.")
+
+    allowed_roots = get_allowed_repo_roots(session_id)
+
+    # First check: see if file matches within any allowed root
+    for root in allowed_roots:
+        is_safe, canonical_target, _ = is_safe_repo_path(root, file_path)
+        if is_safe:
+            if not os.path.exists(canonical_target) or not os.path.isfile(canonical_target):
+                raise HTTPException(status_code=404, detail="File not found.")
+            return canonical_target
+
+    # Target path escapes all allowed repository boundaries
+    raise HTTPException(status_code=403, detail="Access denied: Requested path is outside the repository security boundary.")
+
+
+@app.get("/api/file-content")
+async def get_file_content(file_path: str = Query(...), session_id: str = Query("default")):
+    canonical_path = validate_file_within_boundary(file_path, session_id)
     try:
-        with open(normalized_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
+        size_bytes = os.path.getsize(canonical_path) if os.path.exists(canonical_path) else 0
+        truncated = False
+        with open(canonical_path, "r", encoding="utf-8", errors="ignore") as f:
+            if size_bytes > MAX_VIEWABLE_FILE_SIZE:
+                content = f.read(MAX_VIEWABLE_FILE_SIZE)
+                content += "\n\n/* [Content truncated: File exceeds maximum display limit of 3 MB] */"
+                truncated = True
+            else:
+                content = f.read()
+
         return {
-            "file_path": normalized_path,
+            "file_path": canonical_path,
             "content": content,
-            "lines": len(content.splitlines())
+            "lines": len(content.splitlines()),
+            "truncated": truncated
         }
     except Exception as e:
-        logger.error(f"Failed to read file {normalized_path}: {e}")
+        logger.error(f"Failed to read file {canonical_path}: {e}")
         if settings.DEBUG:
             raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to read the requested file.")
 
 @app.post("/api/summarize")
 async def summarize_file(req: SummarizeRequest):
+    canonical_path = validate_file_within_boundary(req.file_path, req.session_id)
     session = ACTIVE_SESSIONS.get(req.session_id)
-    normalized_path = os.path.normpath(req.file_path)
-    if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
-        raise HTTPException(status_code=404, detail="File path does not exist.")
-    
+
     try:
-        with open(normalized_path, "r", encoding="utf-8", errors="ignore") as f:
-            code_content = f.read()
-        rel_path = os.path.basename(normalized_path)
-        if session:
-            rel_path = os.path.relpath(normalized_path, session.repo_path).replace("\\", "/")
+        with open(canonical_path, "r", encoding="utf-8", errors="ignore") as f:
+            code_content = f.read(MAX_VIEWABLE_FILE_SIZE)
+        rel_path = os.path.basename(canonical_path)
+        if session and session.repo_path:
+            try:
+                rel_path = os.path.relpath(canonical_path, session.repo_path).replace("\\", "/")
+            except ValueError:
+                pass
             
         summary_result = groq_service.summarize_code(rel_path, code_content)
         return summary_result
     except Exception as e:
-        logger.error(f"Summarization error for {normalized_path}: {e}", exc_info=True)
+        logger.error(f"Summarization error for {canonical_path}: {e}", exc_info=True)
         if settings.DEBUG:
             raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to summarize the requested file.")
