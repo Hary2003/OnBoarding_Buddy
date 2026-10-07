@@ -201,7 +201,7 @@ class RepositoryRetriever:
         if file_info.full_path and os.path.exists(file_info.full_path):
             try:
                 with open(file_info.full_path, "r", encoding="utf-8", errors="ignore") as f:
-                    content_lower = f.read().lower()
+                    content_lower = f.read(524288).lower()
                 for term in query_analysis.normalized_terms:
                     if len(term) >= 3 and term in content_lower:
                         score = self.weights["content"]
@@ -400,7 +400,7 @@ class ContextBuilder:
             if file_info and file_info.full_path and os.path.exists(file_info.full_path):
                 try:
                     with open(file_info.full_path, "r", encoding="utf-8", errors="ignore") as f:
-                        content = f.read()
+                        content = f.read(4096)
                     snippet = content[:2000] # Cap snippet length per file
                     if len(content) > 2000:
                         snippet += "\n... (truncated)"

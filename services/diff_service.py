@@ -2,6 +2,7 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple, Any
 from models.repository_index import FileChange, DiffHunk, CodeChange, RepositoryIndex
+from services.security_guard import MAX_DIFF_SIZE
 
 
 class GitDiffParser:
@@ -14,10 +15,14 @@ class GitDiffParser:
         if not diff_text or not diff_text.strip():
             return []
 
+        # Defense against massive diff / regex bomb DoS
+        if len(diff_text) > MAX_DIFF_SIZE:
+            diff_text = diff_text[:MAX_DIFF_SIZE]
+
         raw_chunks = self._split_file_chunks(diff_text)
         file_changes: List[FileChange] = []
 
-        for chunk in raw_chunks:
+        for chunk in raw_chunks[:500]: # Cap max file chunks parsed per diff
             file_change = self._parse_single_file_chunk(chunk, repo_index)
             if file_change:
                 file_changes.append(file_change)
