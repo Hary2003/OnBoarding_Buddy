@@ -74,7 +74,8 @@ class RepoService:
                     multi_options=[
                         "--config", "core.hooksPath=/dev/null",
                         "--no-recurse-submodules"
-                    ]
+                    ],
+                    allow_unsafe_options=True
                 )
                 return True, temp_dir, ""
             except GitCommandError as e:
