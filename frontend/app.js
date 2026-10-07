@@ -6,6 +6,24 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentInspectorNode = null;
     let auditReportCache = null;
 
+    // Security: Safe Markdown Renderer with DOMPurify XSS Sanitization
+    function safeMarkdown(mdText) {
+        if (!mdText) return '';
+        try {
+            const raw = typeof marked !== 'undefined' ? marked.parse(mdText) : String(mdText);
+            if (typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(raw, {
+                    ADD_ATTR: ['target', 'rel'],
+                    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+                    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover']
+                });
+            }
+            return raw;
+        } catch (e) {
+            return String(mdText);
+        }
+    }
+
     // DOM Elements - Shell & Navigation
     const repoSwitcherBtn = document.getElementById("repo-switcher-btn");
     const currentRepoLabel = document.getElementById("current-repo-label");
@@ -439,7 +457,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (overviewArchNarrative) {
             if (arch && arch.overview_narrative) {
-                overviewArchNarrative.innerHTML = marked.parse(arch.overview_narrative);
+                overviewArchNarrative.innerHTML = safeMarkdown(arch.overview_narrative);
             } else {
                 overviewArchNarrative.innerHTML = `
                     <p>The codebase is structured as a <strong>${arch ? arch.architecture_type : 'Modular API'}</strong> architecture comprising ${repoIndex.total_files} analyzed files across ${Object.keys(repoIndex.languages_breakdown || {}).length} language groups.</p>
@@ -595,7 +613,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const data = await res.json();
                 const narrative = data.architecture_summary?.overview_narrative;
                 if (narrative && overviewArchNarrative) {
-                    overviewArchNarrative.innerHTML = marked.parse(narrative);
+                    overviewArchNarrative.innerHTML = safeMarkdown(narrative);
                 }
                 showToast("Deep architecture narrative generated", "success");
             } catch (err) {
@@ -881,7 +899,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (!res.ok) throw new Error("Summarization failed.");
                 const data = await res.json();
-                if (summaryText) summaryText.innerHTML = marked.parse(data.summary);
+                if (summaryText) summaryText.innerHTML = safeMarkdown(data.summary);
                 showToast("File summary generated", "success");
             } catch (err) {
                 if (summaryText) {
@@ -1196,7 +1214,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const data = await res.json();
 
                 const bubble = assistantMsgEl.querySelector(".message-bubble");
-                bubble.innerHTML = marked.parse(data.answer);
+                bubble.innerHTML = safeMarkdown(data.answer);
 
                 // Render Grounded Source Citations
                 if (data.sources && data.sources.length > 0) {
@@ -1434,7 +1452,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (contributionContent) {
                 contributionContent.innerHTML = `
                     <div class="dev-card-body markdown-body">
-                        ${marked.parse(data.plan_narrative)}
+                        ${safeMarkdown(data.plan_narrative)}
                     </div>
                 `;
             }
@@ -1551,7 +1569,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (agentAnswer) {
             agentAnswer.innerHTML = `
                 <h3 style="font-size: 14px; margin-bottom: 8px;">Final Grounded Answer</h3>
-                ${marked.parse(data.answer || "No answer generated.")}
+                ${safeMarkdown(data.answer || "No answer generated.")}
             `;
         }
 
@@ -1963,7 +1981,7 @@ new file mode 100644
 
                 if (!res.ok) throw new Error("Guide generation failed.");
                 const data = await res.json();
-                if (guideContent) guideContent.innerHTML = marked.parse(data.guide);
+                if (guideContent) guideContent.innerHTML = safeMarkdown(data.guide);
                 showToast("Onboarding guide generated successfully", "success");
             } catch (err) {
                 if (guideContent) {
