@@ -2,6 +2,8 @@ import os
 import re
 from typing import Tuple, Optional, Set, List
 
+import posixpath
+
 # Security limits for ingestion and file access to prevent resource exhaustion / DoS
 MAX_PARSEABLE_FILE_SIZE = 1_048_576       # 1 MB: Skip AST/deep regex parse beyond this size
 MAX_VIEWABLE_FILE_SIZE = 3_145_728        # 3 MB: Maximum bytes served to client
@@ -42,14 +44,23 @@ def is_safe_repo_path(repo_root: str, candidate_path: str) -> Tuple[bool, str, O
         return False, "", "Path contains invalid null byte characters."
 
     # 2. Check for reserved system device names (Windows)
-    base_stem = os.path.basename(candidate_str).split(".")[0].upper()
+    base_stem = os.path.basename(candidate_str.replace("\\", "/")).split(".")[0].upper()
     if base_stem in WINDOWS_RESERVED_NAMES:
         return False, "", f"Access to reserved system device '{base_stem}' is forbidden."
+
+    # 3. Cross-platform check: foreign Windows drive letters on non-Windows platforms
+    if os.name != "nt" and re.match(r"^[a-zA-Z]:", candidate_str):
+        return False, candidate_str, "Path traversal attempt: foreign drive path outside repository boundary."
+
+    # 4. Cross-platform relative traversal check (normalizing backslashes to slashes)
+    norm_posix = posixpath.normpath(candidate_str.replace("\\", "/"))
+    if norm_posix == ".." or norm_posix.startswith("../"):
+        return False, candidate_str, "Path traversal attempt: relative path escapes repository boundary."
 
     try:
         canonical_root = os.path.realpath(os.path.abspath(root_str))
 
-        if os.path.isabs(candidate_str):
+        if os.path.isabs(candidate_str) or candidate_str.startswith("/") or (os.name == "nt" and re.match(r"^[a-zA-Z]:[/\\]", candidate_str)):
             target = candidate_str
         else:
             target = os.path.join(canonical_root, candidate_str)
