@@ -176,6 +176,28 @@ class Settings:
         else:
             self.LOG_LEVEL = os.getenv("LOG_LEVEL", _default_log).strip().upper()
 
+        # Rate Limiting Configuration (per client IP sliding-window limit)
+        if "RATE_LIMIT_ENABLED" in kwargs and kwargs["RATE_LIMIT_ENABLED"] is not None:
+            self.RATE_LIMIT_ENABLED: bool = _parse_bool(kwargs["RATE_LIMIT_ENABLED"])
+        else:
+            self.RATE_LIMIT_ENABLED = _parse_bool(os.getenv("RATE_LIMIT_ENABLED", "true"), default=True)
+
+        if "RATE_LIMIT_PER_MINUTE" in kwargs and kwargs["RATE_LIMIT_PER_MINUTE"] is not None:
+            self.RATE_LIMIT_PER_MINUTE: int = int(kwargs["RATE_LIMIT_PER_MINUTE"])
+        else:
+            self.RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "120"))
+
+        # API Authentication Configuration (optional API Key / Bearer token gate)
+        if "API_AUTH_ENABLED" in kwargs and kwargs["API_AUTH_ENABLED"] is not None:
+            self.API_AUTH_ENABLED: bool = _parse_bool(kwargs["API_AUTH_ENABLED"])
+        else:
+            self.API_AUTH_ENABLED = _parse_bool(os.getenv("API_AUTH_ENABLED", "false"), default=False)
+
+        if "API_KEY" in kwargs and kwargs["API_KEY"] is not None:
+            self.API_KEY: str = str(kwargs["API_KEY"]).strip()
+        else:
+            self.API_KEY = os.getenv("API_KEY", os.getenv("ONBOARDING_API_KEY", "")).strip()
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
@@ -213,6 +235,19 @@ class Settings:
     def masked_database_url(self) -> str:
         """Returns a sanitized representation of the database URL with password stripped."""
         return _mask_url(self.DATABASE_URL)
+
+    @property
+    def is_auth_configured(self) -> bool:
+        return bool(self.API_AUTH_ENABLED and self.API_KEY)
+
+    @property
+    def masked_api_key(self) -> str:
+        """Returns a safe masked representation of the API key (never leaks the full secret)."""
+        if not self.API_KEY:
+            return "not-configured"
+        if len(self.API_KEY) <= 8:
+            return "configured (masked)"
+        return f"{self.API_KEY[:4]}...{self.API_KEY[-4:]}"
 
     def get_cors_origins(self) -> List[str]:
         """Returns the list of allowed CORS origins based on environment."""
