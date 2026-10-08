@@ -1606,75 +1606,42 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================================================
     // PAGE 7: PR REVIEW TAB LOGIC
     // =========================================================================
-    const SAMPLE_FEATURE_DIFF = `diff --git a/services/auth_service.py b/services/auth_service.py
-new file mode 100644
---- /dev/null
-+++ b/services/auth_service.py
-@@ -0,0 +1,24 @@
-+import jwt
-+from datetime import datetime, timezone, timedelta
-+
-+class AuthService:
-+    def __init__(self, secret: str = "configured_secret"):
-+        self.secret = secret
-+
-+    def create_access_token(self, user_id: str) -> str:
-+        payload = {
-+            "sub": user_id,
-+            "exp": datetime.now(timezone.utc) + timedelta(hours=1)
-+        }
-+        return jwt.encode(payload, self.secret, algorithm="HS256")
-+
-+    def verify_token(self, token: str) -> dict:
-+        try:
-+            return jwt.decode(token, self.secret, algorithms=["HS256"])
-+        except Exception as e:
-+            return {"valid": False, "error": str(e)}
-+`;
-
-    const SAMPLE_VULN_DIFF = `diff --git a/services/report_service.py b/services/report_service.py
---- a/services/report_service.py
-+++ b/services/report_service.py
-@@ -10,6 +10,14 @@ def generate_report(query_param: str):
-+    api_key = "AIzaSyD-TESTING-SECRET-KEY-12345678"
-+    eval(query_param)
-+    import subprocess
-+    subprocess.Popen("cat /etc/passwd", shell=True)
-+    import requests
-+    requests.get(user_url, verify=False)
-+    return {"status": "generated"}
-+`;
-
-    const SAMPLE_ARCH_DIFF = `diff --git a/models/user_model.py b/models/user_model.py
---- a/models/user_model.py
-+++ b/models/user_model.py
-@@ -3,6 +3,9 @@ from pydantic import BaseModel
-+# Architectural layer violation: Model importing high-level API server
-+from server import app, ACTIVE_SESSIONS
-+
- class UserModel(BaseModel):
-     user_id: str
-     username: str
-`;
+    let sampleDiffsCache = null;
+    async function getSampleDiff(type) {
+        if (!sampleDiffsCache) {
+            try {
+                const res = await fetch("/api/pr/sample-diffs");
+                if (res.ok) {
+                    sampleDiffsCache = await res.json();
+                }
+            } catch (err) {
+                console.error("Failed to load sample diffs:", err);
+            }
+        }
+        return sampleDiffsCache ? (sampleDiffsCache[type] || "") : "";
+    }
 
     if (loadFeatureBtn) {
-        loadFeatureBtn.addEventListener("click", () => {
+        loadFeatureBtn.addEventListener("click", async () => {
             if (prTitleInput) prTitleInput.value = "feat(auth): implement AuthService token generation and validation";
-            if (prDiffInput) prDiffInput.value = SAMPLE_FEATURE_DIFF;
+            const diff = await getSampleDiff("feature");
+            if (prDiffInput) prDiffInput.value = diff;
         });
     }
 
     if (loadVulnBtn) {
-        loadVulnBtn.addEventListener("click", () => {
+        loadVulnBtn.addEventListener("click", async () => {
             if (prTitleInput) prTitleInput.value = "fix(report): dynamic report query handling";
-            if (prDiffInput) prDiffInput.value = SAMPLE_VULN_DIFF;
+            const diff = await getSampleDiff("vulnerable");
+            if (prDiffInput) prDiffInput.value = diff;
         });
     }
 
     if (loadArchBtn) {
-        loadArchBtn.addEventListener("click", () => {
+        loadArchBtn.addEventListener("click", async () => {
             if (prTitleInput) prTitleInput.value = "refactor(models): import server app inside user model";
-            if (prDiffInput) prDiffInput.value = SAMPLE_ARCH_DIFF;
+            const diff = await getSampleDiff("architecture");
+            if (prDiffInput) prDiffInput.value = diff;
         });
     }
 

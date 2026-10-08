@@ -1,5 +1,7 @@
 import os
+import secrets
 import logging
+from pathlib import Path
 from typing import Optional, Dict, List
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +27,7 @@ from models.repository_index import (
     ContributionPlan, AuditReport, ContributionOpportunity,
     AgentExploreResponse, PullRequestAnalysis, PRReviewResponse, PRSummary
 )
-from services.security_guard import is_safe_repo_path, MAX_VIEWABLE_FILE_SIZE
+from services.security_guard import is_safe_repo_path, MAX_VIEWABLE_FILE_SIZE, rate_limiter
 
 logger = logging.getLogger("onboarding_buddy.server")
 
@@ -63,6 +65,102 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# --- Security Middlewares ---
+
+@app.middleware("http")
+async def api_auth_middleware(request: Request, call_next):
+    """
+    Optional API Authentication gate.
+    When API_AUTH_ENABLED is True and API_KEY is configured, validates callers
+    provide a valid Bearer token or X-API-Key header on /api/* routes,
+    excluding unauthenticated health probes and CORS preflights.
+    """
+    if settings.API_AUTH_ENABLED and settings.API_KEY:
+        path = request.url.path
+        if path.startswith("/api/") and path not in ("/api/health", "/api/db/status") and request.method != "OPTIONS":
+            auth_header = request.headers.get("Authorization", "").strip()
+            x_api_key = request.headers.get("X-API-Key", "").strip()
+
+            token = ""
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header[7:].strip()
+            elif x_api_key:
+                token = x_api_key
+
+            if not token or not secrets.compare_digest(token, settings.API_KEY):
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Unauthorized: Invalid or missing API key."},
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
+
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def rate_limiting_middleware(request: Request, call_next):
+    """
+    Sliding-window IP rate limiter to defend against DoS, brute-force, and quota exhaustion.
+    Protects /api/* endpoints while allowing health probes and static files.
+    """
+    if settings.RATE_LIMIT_ENABLED and request.method != "OPTIONS":
+        path = request.url.path
+        if path.startswith("/api/") and path not in ("/api/health", "/api/db/status"):
+            forwarded = request.headers.get("X-Forwarded-For")
+            if forwarded:
+                client_ip = forwarded.split(",")[0].strip()
+            elif request.client and request.client.host:
+                client_ip = request.client.host
+            else:
+                client_ip = "127.0.0.1"
+
+            is_allowed, remaining, retry_after = rate_limiter.check_rate_limit(
+                client_ip=client_ip,
+                path=path,
+                limit=settings.RATE_LIMIT_PER_MINUTE
+            )
+
+            if not is_allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests. Please slow down and try again later."},
+                    headers={
+                        "Retry-After": str(retry_after),
+                        "X-RateLimit-Limit": str(settings.RATE_LIMIT_PER_MINUTE),
+                        "X-RateLimit-Remaining": "0"
+                    }
+                )
+
+            response = await call_next(request)
+            response.headers["X-RateLimit-Limit"] = str(settings.RATE_LIMIT_PER_MINUTE)
+            response.headers["X-RateLimit-Remaining"] = str(remaining)
+            return response
+
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """
+    Enforces defense-in-depth HTTP security headers on all responses:
+    - X-Content-Type-Options: nosniff
+    - X-Frame-Options: DENY (clickjacking protection)
+    - X-XSS-Protection: 1; mode=block
+    - Referrer-Policy: strict-origin-when-cross-origin
+    - Permissions-Policy: restricts browser hardware APIs
+    - Strict-Transport-Security: HSTS in production
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=(), payment=()"
+    if settings.is_production:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    return response
+
 
 # --- Centralized Secure Error Handling ---
 
@@ -186,7 +284,9 @@ async def health_check():
         "groq_model": settings.GROQ_MODEL,
         "database": db_health,
         "host": settings.HOST,
-        "port": settings.PORT
+        "port": settings.PORT,
+        "rate_limiting_enabled": settings.RATE_LIMIT_ENABLED,
+        "auth_configured": settings.is_auth_configured,
     }
 
 @app.get("/api/db/status")
@@ -263,13 +363,17 @@ def validate_file_within_boundary(file_path: str, session_id: str = "default") -
 
     allowed_roots = get_allowed_repo_roots(session_id)
 
-    # First check: see if file matches within any allowed root
+    any_safe_candidate = False
     for root in allowed_roots:
         is_safe, canonical_target, _ = is_safe_repo_path(root, file_path)
         if is_safe:
-            if not os.path.exists(canonical_target) or not os.path.isfile(canonical_target):
-                raise HTTPException(status_code=404, detail="File not found.")
-            return canonical_target
+            any_safe_candidate = True
+            if os.path.exists(canonical_target) and os.path.isfile(canonical_target):
+                return canonical_target
+
+    # If the file path was structurally safe in at least one repository boundary but not found on disk
+    if any_safe_candidate:
+        raise HTTPException(status_code=404, detail="File not found.")
 
     # Target path escapes all allowed repository boundaries
     raise HTTPException(status_code=403, detail="Access denied: Requested path is outside the repository security boundary.")
@@ -504,6 +608,25 @@ async def summarize_pr(req: PRSummaryRequest):
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+@app.get("/api/pr/sample-diffs")
+async def get_sample_diffs():
+    """Provides sample PR diffs for interactive demo reviews from fixture files."""
+    fixtures_dir = Path(__file__).parent / "tests" / "fixtures"
+    feature_file = fixtures_dir / "sample_feature_diff.txt"
+    vuln_file = fixtures_dir / "sample_vulnerable_diff.txt"
+    arch_file = fixtures_dir / "sample_architecture_diff.txt"
+
+    def read_fixture(p: Path) -> str:
+        if p.exists():
+            return p.read_text(encoding="utf-8")
+        return ""
+
+    return {
+        "feature": read_fixture(feature_file),
+        "vulnerable": read_fixture(vuln_file),
+        "architecture": read_fixture(arch_file),
+    }
 
 @app.delete("/api/chat/history")
 async def clear_chat_history(session_id: str = Query("default")):
