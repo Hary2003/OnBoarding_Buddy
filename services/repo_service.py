@@ -12,8 +12,10 @@ from datetime import datetime
 from git import Repo, GitCommandError
 
 from models.repository_index import Symbol, Dependency, FileInfo, RepositoryIndex, GraphNode, GraphEdge, CycleDetail, ArchitectureSummary
+from config import settings
 from services.security_guard import (
     is_safe_git_target,
+    is_safe_local_clone_path,
     is_safe_repo_path,
     is_symlink_escaping_boundary,
     count_lines_safe,
@@ -61,6 +63,9 @@ class RepoService:
             return False, "", error_msg or "Invalid repository target."
 
         if os.path.exists(target) and os.path.isdir(target):
+            is_safe_local, local_err = is_safe_local_clone_path(target, is_production=settings.is_production)
+            if not is_safe_local:
+                return False, "", local_err or "Access to sensitive system path is forbidden."
             return True, os.path.realpath(os.path.abspath(target)), ""
 
         if target.startswith("http://") or target.startswith("https://") or target.startswith("git@") or target.endswith(".git"):

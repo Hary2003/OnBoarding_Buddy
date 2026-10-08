@@ -202,6 +202,9 @@ class ContributionOpportunity(BaseModel):
     remediation_plan: str = Field("", description="Recommended open source contribution fix or pull request plan")
     suggested_issue_title: str = Field("", description="Pre-formulated issue title for one-click analysis")
     suggested_issue_desc: str = Field("", description="Pre-formulated issue description for one-click analysis")
+    confidence: Optional[str] = Field("Medium", description="Detection confidence: High, Medium, Low")
+    line_number: Optional[int] = Field(None, description="Line number where finding was detected")
+    detection_reason: Optional[str] = Field(None, description="Detailed explanation of detection reason")
 
 class AuditReport(BaseModel):
     repo_name: str = Field(..., description="Repository name")
