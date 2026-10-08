@@ -14,6 +14,8 @@ from server import app, ACTIVE_SESSIONS
 from services.security_guard import (
     is_safe_repo_path,
     is_safe_git_target,
+    is_safe_remote_url,
+    is_safe_local_clone_path,
     is_symlink_escaping_boundary,
     count_lines_safe,
     MAX_PARSEABLE_FILE_SIZE,
@@ -237,6 +239,57 @@ class TestAdversarialSecurity(unittest.TestCase):
         self.assertIn("function safeMarkdown", app_js, "app.js must define safeMarkdown helper")
         self.assertIn("DOMPurify.sanitize", app_js, "app.js must sanitize markdown output with DOMPurify")
 
+    def test_11_ssrf_internal_ips_and_metadata_blocked(self):
+        """Verify remote repository URLs targeting internal IPs, loopbacks, and cloud metadata are blocked (SSRF)."""
+        ssrf_targets = [
+            "http://127.0.0.1:8000/repo.git",
+            "http://localhost:5000/repo.git",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://100.100.100.200/latest/meta-data/",
+            "http://10.0.0.1/private/repo.git",
+            "http://192.168.1.1/internal.git",
+            "http://172.16.0.1/secret.git",
+            "http://[::1]/repo.git",
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "http://service.local/repo.git",
+            "http://internal-host.internal/repo.git"
+        ]
+        for target in ssrf_targets:
+            is_safe, err = is_safe_remote_url(target)
+            self.assertFalse(is_safe, f"SSRF target '{target}' should be blocked")
+            self.assertIn("ssrf", (err or "").lower())
+
+            # Verify clone endpoint rejects it with HTTP 400
+            res = self.client.post("/api/clone", json={"url_or_path": target})
+            self.assertEqual(res.status_code, 400)
+            self.assertIn("ssrf", res.json().get("detail", "").lower())
+
+    def test_12_double_encoded_path_traversal_blocked(self):
+        """Verify double and triple URL-encoded path traversal attacks are decoded and blocked."""
+        encoded_payloads = [
+            "%252e%252e%252fetc%252fpasswd",
+            "%2e%2e%2f%2e%2e%2fetc%2fshadow",
+            "%252e%252e%255cWindows%255cwin.ini",
+            "..%252f..%252f.env"
+        ]
+        for payload in encoded_payloads:
+            res = self.client.get(f"/api/file-content?file_path={payload}&session_id=default")
+            self.assertEqual(res.status_code, 403, f"Encoded traversal '{payload}' should return 403")
+            self.assertIn("security boundary", res.json().get("detail", "").lower())
+
+    def test_13_sensitive_system_directory_clone_blocked(self):
+        """Verify sensitive system paths (/etc, C:\\Windows) cannot be ingested or cloned as local repositories."""
+        sensitive_paths = ["/etc", "/root", "/var", "C:\\Windows", "C:\\Program Files"]
+        for p in sensitive_paths:
+            is_safe, err = is_safe_local_clone_path(p)
+            self.assertFalse(is_safe, f"System path '{p}' should be rejected")
+            self.assertIn("sensitive system path", (err or "").lower())
+
+            # Verify via clone endpoint
+            res = self.client.post("/api/clone", json={"url_or_path": p})
+            self.assertEqual(res.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()
+

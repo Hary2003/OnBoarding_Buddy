@@ -7,6 +7,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from config import Settings, _parse_bool, _parse_origins, settings
 from server import app
+from services.security_guard import rate_limiter
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
@@ -15,13 +16,25 @@ class TestProductionSecurity(TestCase):
     def setUp(self):
         self.orig_debug = app.debug
         self.orig_settings_debug = settings.DEBUG
+        self.orig_rate_limit_enabled = settings.RATE_LIMIT_ENABLED
+        self.orig_rate_limit_per_min = settings.RATE_LIMIT_PER_MINUTE
+        self.orig_api_auth_enabled = settings.API_AUTH_ENABLED
+        self.orig_api_key = settings.API_KEY
+        self.orig_env = settings.ENVIRONMENT
         app.debug = False
         app.middleware_stack = None
+        rate_limiter.reset()
         self.client = TestClient(app, raise_server_exceptions=False)
 
     def tearDown(self):
         app.debug = self.orig_debug
         settings.DEBUG = self.orig_settings_debug
+        settings.RATE_LIMIT_ENABLED = self.orig_rate_limit_enabled
+        settings.RATE_LIMIT_PER_MINUTE = self.orig_rate_limit_per_min
+        settings.API_AUTH_ENABLED = self.orig_api_auth_enabled
+        settings.API_KEY = self.orig_api_key
+        settings.ENVIRONMENT = self.orig_env
+        rate_limiter.reset()
         app.middleware_stack = None
 
     def test_01_gitignore_excludes_env_and_secrets(self):
@@ -258,6 +271,95 @@ class TestProductionSecurity(TestCase):
         self.assertIn("actions/setup-python@v5", content)
         self.assertIn("unittest discover tests", content)
         self.assertIn("docker build", content)
+
+    def test_18_security_headers_present(self):
+        """Verify HTTP security headers (nosniff, DENY, HSTS, etc.) are present on responses."""
+        res = self.client.get("/api/health")
+        self.assertEqual(res.status_code, 200)
+        headers = {k.lower(): v for k, v in res.headers.items()}
+        self.assertEqual(headers.get("x-content-type-options"), "nosniff")
+        self.assertEqual(headers.get("x-frame-options"), "DENY")
+        self.assertEqual(headers.get("x-xss-protection"), "1; mode=block")
+        self.assertEqual(headers.get("referrer-policy"), "strict-origin-when-cross-origin")
+        self.assertIn("geolocation=()", headers.get("permissions-policy", ""))
+
+        # In production mode, HSTS should be present
+        with patch.object(settings, "ENVIRONMENT", "production"):
+            prod_res = self.client.get("/api/health")
+            prod_headers = {k.lower(): v for k, v in prod_res.headers.items()}
+            self.assertIn("max-age=31536000", prod_headers.get("strict-transport-security", ""))
+
+    def test_19_rate_limiting_enforcement_and_headers(self):
+        """Verify rate limiter blocks abuse with 429 and includes Retry-After and rate limit headers."""
+        settings.RATE_LIMIT_ENABLED = True
+        settings.RATE_LIMIT_PER_MINUTE = 3
+        rate_limiter.reset()
+
+        # Send 3 requests (within limit)
+        for i in range(3):
+            res = self.client.get("/api/repositories")
+            self.assertEqual(res.status_code, 200)
+            self.assertIn("x-ratelimit-limit", [k.lower() for k in res.headers.keys()])
+
+        # 4th request must be blocked with 429
+        blocked_res = self.client.get("/api/repositories")
+        self.assertEqual(blocked_res.status_code, 429)
+        self.assertIn("too many requests", blocked_res.json().get("detail", "").lower())
+        self.assertIn("retry-after", [k.lower() for k in blocked_res.headers.keys()])
+        # Ensure security headers are still present even on 429 responses
+        self.assertEqual(blocked_res.headers.get("x-content-type-options"), "nosniff")
+        self.assertEqual(blocked_res.headers.get("x-frame-options"), "DENY")
+
+        # Health check must bypass rate limiting
+        health_res = self.client.get("/api/health")
+        self.assertEqual(health_res.status_code, 200)
+
+    def test_20_api_authentication_middleware(self):
+        """Verify API key authentication when API_AUTH_ENABLED is True."""
+        settings.API_AUTH_ENABLED = True
+        settings.API_KEY = "test-secret-api-key-12345"
+
+        # 1. Unauthenticated request to /api/repositories returns 401
+        res = self.client.get("/api/repositories")
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("unauthorized", res.json().get("detail", "").lower())
+        self.assertEqual(res.headers.get("www-authenticate"), "Bearer")
+        # Ensure security headers present on 401
+        self.assertEqual(res.headers.get("x-content-type-options"), "nosniff")
+
+        # 2. Invalid Bearer token returns 401
+        res_bad = self.client.get("/api/repositories", headers={"Authorization": "Bearer invalid-token"})
+        self.assertEqual(res_bad.status_code, 401)
+
+        # 3. Valid Bearer token returns 200
+        res_bearer = self.client.get("/api/repositories", headers={"Authorization": "Bearer test-secret-api-key-12345"})
+        self.assertEqual(res_bearer.status_code, 200)
+
+        # 4. Valid X-API-Key header returns 200
+        res_apikey = self.client.get("/api/repositories", headers={"X-API-Key": "test-secret-api-key-12345"})
+        self.assertEqual(res_apikey.status_code, 200)
+
+        # 5. Health check and DB status must remain accessible without auth
+        res_health = self.client.get("/api/health")
+        self.assertEqual(res_health.status_code, 200)
+        res_db = self.client.get("/api/db/status")
+        self.assertEqual(res_db.status_code, 200)
+
+    def test_21_api_key_masking(self):
+        """Verify API_KEY masking prevents leaking secret keys in configuration outputs."""
+        s = Settings(API_KEY="")
+        self.assertEqual(s.masked_api_key, "not-configured")
+        self.assertFalse(s.is_auth_configured)
+
+        s2 = Settings(API_KEY="short")
+        self.assertEqual(s2.masked_api_key, "configured (masked)")
+
+        s3 = Settings(API_AUTH_ENABLED=True, API_KEY="onboarding_sec_prod_key_998877")
+        self.assertTrue(s3.is_auth_configured)
+        masked = s3.masked_api_key
+        self.assertTrue(masked.startswith("onbo"))
+        self.assertTrue(masked.endswith("8877"))
+        self.assertNotIn("prod_key", masked)
 
 
 if __name__ == "__main__":
