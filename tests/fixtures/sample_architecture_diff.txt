@@ -1,0 +1,10 @@
+diff --git a/models/user_model.py b/models/user_model.py
+--- a/models/user_model.py
++++ b/models/user_model.py
+@@ -3,6 +3,9 @@ from pydantic import BaseModel
++# Architectural layer violation: Model importing high-level API server
++from server import app, ACTIVE_SESSIONS
++
+ class UserModel(BaseModel):
+     user_id: str
+     username: str

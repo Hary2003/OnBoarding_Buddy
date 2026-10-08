@@ -1,0 +1,11 @@
+diff --git a/services/report_service.py b/services/report_service.py
+--- a/services/report_service.py
++++ b/services/report_service.py
+@@ -10,6 +10,14 @@ def generate_report(query_param: str):
++    api_key = "AIzaSyD-TESTING-SECRET-KEY-12345678"
++    eval(query_param)
++    import subprocess
++    subprocess.Popen("cat /etc/passwd", shell=True)
++    import requests
++    requests.get(user_url, verify=False)
++    return {"status": "generated"}

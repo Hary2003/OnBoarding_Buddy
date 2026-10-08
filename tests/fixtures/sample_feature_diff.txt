@@ -1,0 +1,24 @@
+diff --git a/services/auth_service.py b/services/auth_service.py
+new file mode 100644
+--- /dev/null
++++ b/services/auth_service.py
+@@ -0,0 +1,24 @@
++import jwt
++from datetime import datetime, timezone, timedelta
++
++class AuthService:
++    def __init__(self, secret: str = "configured_secret"):
++        self.secret = secret
++
++    def create_access_token(self, user_id: str) -> str:
++        payload = {
++            "sub": user_id,
++            "exp": datetime.now(timezone.utc) + timedelta(hours=1)
++        }
++        return jwt.encode(payload, self.secret, algorithm="HS256")
++
++    def verify_token(self, token: str) -> dict:
++        try:
++            return jwt.decode(token, self.secret, algorithms=["HS256"])
++        except Exception as e:
++            return {"valid": False, "error": str(e)}
