@@ -1,0 +1,54 @@
+# ==============================================================================
+# Render Blueprint Specification for OnBoarding Buddy
+# High-Performance Code Intelligence & Repository Onboarding Platform
+# Documentation: https://render.com/docs/blueprint-spec
+# ==============================================================================
+
+version: "1"
+
+services:
+  - type: web
+    name: onboarding-buddy
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      # --- Runtime & Server Settings ---
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "8000"
+      - key: RELOAD
+        value: "false"
+      - key: ENABLE_DOCS
+        value: "true"
+
+      # --- AI Engine Settings ---
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+
+      # --- Database Connection ---
+      # Enter your Neon Serverless PostgreSQL URL, Supabase, or Render Postgres.
+      # If left empty, OnBoarding Buddy automatically falls back to SQLite.
+      - key: DATABASE_URL
+        sync: false
+
+      # --- Security & Rate Limiting ---
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: API_AUTH_ENABLED
+        value: "false"
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false

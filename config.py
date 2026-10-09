@@ -99,14 +99,14 @@ class Settings:
                 self.IS_CONTAINER = _is_container()
 
         # Server network binding
-        # In container environments, binding to 127.0.0.1 or localhost isolates the server from host port mapping.
-        _default_host = "0.0.0.0" if (self.ENVIRONMENT == "production" or self.IS_CONTAINER) else "127.0.0.1"
+        # In container and cloud environments, binding to 127.0.0.1 or localhost isolates the server from host port mapping.
+        _default_host = "0.0.0.0" if (self.ENVIRONMENT == "production" or self.IS_CONTAINER or os.getenv("RENDER")) else "127.0.0.1"
         if "HOST" in kwargs and kwargs["HOST"] is not None:
             raw_host = str(kwargs["HOST"]).strip()
         else:
             raw_host = os.getenv("HOST", _default_host).strip()
 
-        if self.IS_CONTAINER and raw_host in ("127.0.0.1", "localhost"):
+        if (self.IS_CONTAINER or os.getenv("RENDER")) and raw_host in ("127.0.0.1", "localhost"):
             self.HOST: str = "0.0.0.0"
         else:
             self.HOST: str = raw_host
@@ -253,6 +253,9 @@ class Settings:
         """Returns the list of allowed CORS origins based on environment."""
         if self.CORS_ALLOWED_ORIGINS:
             return _parse_origins(self.CORS_ALLOWED_ORIGINS)
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+        if render_url:
+            return [render_url]
         if self.is_production:
             # Production: strict by default, never return wildcard "*"
             return []

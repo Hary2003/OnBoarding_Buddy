@@ -4,9 +4,13 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-2.0.0-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12-blue?style=flat&logo=python)](https://python.org)
 [![Docker](https://img.shields.io/badge/Docker-Production%20Ready-2496ED?style=flat&logo=docker)](https://docker.com)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Hary2003/OnBoarding_Buddy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > **AI-powered repository intelligence and agentic codebase exploration platform for developers.**
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Hary2003/OnBoarding_Buddy)
+*1-Click deployment available. See the [Render Deployment Guide](RENDER_DEPLOYMENT.md) for complete details.*
 
 OnBoarding Buddy helps developers understand, navigate, and contribute to unfamiliar codebases.
 
